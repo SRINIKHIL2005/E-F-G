@@ -46,6 +46,7 @@ export default defineConfig(({ mode }) => {
       host: "0.0.0.0",
       port: process.env.PORT ? parseInt(process.env.PORT) : 8080,
       strictPort: false,
+      allowedHosts: ["e-f-g-1.onrender.com", ".onrender.com"],
     },
     plugins: [
       react(),
