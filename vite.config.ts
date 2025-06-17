@@ -20,7 +20,9 @@ export default defineConfig(({ mode }) => {
       },
       sourcemap: false, // Disable for production
       minify: 'terser',
-      chunkSizeWarningLimit: 1000
+      chunkSizeWarningLimit: 1000,
+      assetsDir: 'assets',
+      target: 'es2015'
     },
     server: {
       host: "0.0.0.0", // Important for Render deployment
@@ -47,6 +49,10 @@ export default defineConfig(({ mode }) => {
       port: parseInt(process.env.PORT || "8080"),
       strictPort: true,
       allowedHosts: ["e-f-g-1.onrender.com", ".onrender.com"],
+      headers: {
+        "Cache-Control": "no-cache",
+        "Access-Control-Allow-Origin": "*",
+      },
     },
     plugins: [
       react(),
