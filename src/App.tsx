@@ -36,27 +36,31 @@ const GOOGLE_CLIENT_ID = "848808041308-um447s2kvr380bn3bnk7u9emlv7acsba.apps.goo
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <BrowserRouter 
-    basename="/EDUGALXY"
-    future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-  >
-    <QueryClientProvider client={queryClient}>
-      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-        <ThemeProvider>
-          <AuthProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <Routes>
-                {/* Debug route - temporary */}
-                <Route path="/debug" element={<DebugPage />} />
-                
-                {/* Public routes */}
-                <Route path="/" element={<Index />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/thank-you" element={<ThankYou />} />
-                <Route path="/Results" element={<Results />} />
+const App = () => {
+  // Use different basename based on deployment
+  const basename = import.meta.env.VITE_RENDER_DEPLOYMENT === 'true' ? '/' : '/EDUGALXY';
+  
+  return (
+    <BrowserRouter 
+      basename={basename}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
+      <QueryClientProvider client={queryClient}>
+        <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+          <ThemeProvider>
+            <AuthProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <Routes>
+                  {/* Debug route - temporary */}
+                  <Route path="/debug" element={<DebugPage />} />
+                  
+                  {/* Public routes */}
+                  <Route path="/" element={<Index />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/thank-you" element={<ThankYou />} />
+                  <Route path="/Results" element={<Results />} />
                 
                 {/* Legal routes */}
                 <Route path="/privacy" element={<PrivacyPolicyPage />} />
@@ -181,7 +185,8 @@ const App = () => (
         </ThemeProvider>
       </GoogleOAuthProvider>
     </QueryClientProvider>
-  </BrowserRouter>
-);
+    </BrowserRouter>
+  );
+};
 
 export default App;
