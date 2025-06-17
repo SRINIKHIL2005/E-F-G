@@ -37,7 +37,7 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = process.env.NODE_ENV === 'production' 
   ? [
       process.env.FRONTEND_URL,
-      'https://your-frontend-app.onrender.com' // Replace with your actual Render frontend URL
+      'https://e-f-g-1.onrender.com' // Your actual Render frontend URL
     ]
   : [
       'http://172.16.0.2:8080',
@@ -58,7 +58,7 @@ const io = new Server(server, {
 const corsOrigins = process.env.NODE_ENV === 'production'
   ? [
       process.env.FRONTEND_URL,
-      'https://your-frontend-app.onrender.com' // Replace with your actual Render frontend URL
+      'https://e-f-g-1.onrender.com' // Your actual Render frontend URL
     ]
   : [
       'http://172.16.0.2:8080',
@@ -68,7 +68,23 @@ const corsOrigins = process.env.NODE_ENV === 'production'
     ];
 
 app.use(cors({
-  origin: corsOrigins,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if the origin is in our allowed list
+    if (corsOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // For production, also allow any .onrender.com subdomain
+    if (process.env.NODE_ENV === 'production' && origin.endsWith('.onrender.com')) {
+      return callback(null, true);
+    }
+    
+    const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+    return callback(new Error(msg), false);
+  },
   credentials: true,           // allow Set-Cookie if needed
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization','x-gemini-api-key']
