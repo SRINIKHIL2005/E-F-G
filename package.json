@@ -111,6 +111,9 @@
     "vaul": "^0.9.3",
     "vite": "^5.4.19",
     "@vitejs/plugin-react-swc": "^3.10.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.11",
     "xss": "^1.0.15",
     "xss-clean": "^0.1.4",
     "zod": "^3.23.8"
@@ -123,7 +126,6 @@
     "@types/node": "^22.15.30",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
-    "autoprefixer": "^10.4.20",
     "browserslist": "^4.24.4",
     "caniuse-lite": "^1.0.30001713",
     "concurrently": "^8.2.2",
@@ -135,9 +137,7 @@
     "jest": "^30.0.0",
     "lovable-tagger": "^1.1.8",
     "nodemon": "^3.1.10",
-    "postcss": "^8.4.47",
     "supertest": "^7.1.1",
-    "tailwindcss": "^3.4.11",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.0.1"
   }
