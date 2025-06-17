@@ -28,6 +28,7 @@ import StudentAttendancePage from "./pages/student/Attendance";
 import Profile from "./pages/feedback/Profile";
 import CoursesStudent from "./pages/feedback/CoursesStudent"; 
 import CoursesTeacher from "./pages/feedback/CoursesTeacher";
+import DebugPage from "./components/DebugPage";
 import ManageStudents from "./pages/teacher/ManageStudents";
 import AILearningCompanion from "./pages/ai/AILearningCompanion";
 import AIQuizArena from "./pages/ai/AIQuizArena";
@@ -48,6 +49,9 @@ const App = () => (
               <Toaster />
               <Sonner />
               <Routes>
+                {/* Debug route - temporary */}
+                <Route path="/debug" element={<DebugPage />} />
+                
                 {/* Public routes */}
                 <Route path="/" element={<Index />} />
                 <Route path="/login" element={<Login />} />
