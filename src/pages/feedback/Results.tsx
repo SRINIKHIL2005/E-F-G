@@ -59,6 +59,12 @@ declare global {
       };
     };
   }
+  
+  namespace NodeJS {
+    interface ProcessEnv {
+      NEXT_PUBLIC_API_URL?: string;
+    }
+  }
 }
 
 /**
@@ -70,8 +76,16 @@ const getApiBaseUrl = () => {
     const nextPublicApiUrl = window.__NEXT_DATA__?.props?.pageProps?.env?.NEXT_PUBLIC_API_URL;
     if (nextPublicApiUrl) return nextPublicApiUrl;
     
-    if (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_API_URL) {
-      return process.env.NEXT_PUBLIC_API_URL;
+    // Check if process is available and has env property
+    try {
+      if (typeof globalThis !== 'undefined' && 'process' in globalThis) {
+        const processEnv = (globalThis as any).process?.env;
+        if (processEnv?.NEXT_PUBLIC_API_URL) {
+          return processEnv.NEXT_PUBLIC_API_URL;
+        }
+      }
+    } catch {
+      // Ignore errors when process is not available
     }
   }
   return 'http://localhost:5000'; // Default fallback, adjust as necessary

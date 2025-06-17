@@ -62,8 +62,7 @@ const ManageStudents: React.FC<ManageStudentsProps> = ({ department, onDataChang
     program: '',
     phone: '',
     password: ''
-  });
-  // API instance
+  });  // API instance
   const apiClient = axios.create({
     baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000',
     headers: {
@@ -83,9 +82,7 @@ const ManageStudents: React.FC<ManageStudentsProps> = ({ department, onDataChang
         setStudents(studentData);
         console.log('✅ Authenticated students endpoint worked! Received', studentData.length, 'student records');
       } catch (authError) {
-        console.warn('⚠️ Authenticated students endpoint failed, trying debug endpoint...', authError);
-        
-        // Fallback to non-authenticated debug endpoint
+        console.warn('⚠️ Authenticated students endpoint failed, trying debug endpoint...', authError);        // Fallback to non-authenticated debug endpoint
         const debugResponse = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/hod/debug-students`);
         
         // Handle both array and {students: [...]} response formats

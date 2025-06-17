@@ -34,27 +34,41 @@ const server = createServer(app);
 const PORT = process.env.PORT || 5000;
 
 // 2.5️⃣ Initialize Socket.io
-const io = new Server(server, {
-  cors: {
-    origin: [
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+  ? [
+      process.env.FRONTEND_URL,
+      'https://your-frontend-app.onrender.com' // Replace with your actual Render frontend URL
+    ]
+  : [
       'http://172.16.0.2:8080',
       'http://localhost:3000',
       'http://localhost:8080',
       'http://localhost:8081'
-    ],
+    ];
+
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true
   }
 });
 
 // 3️⃣ CORS & JSON parsing (MUST come before everything else)
+const corsOrigins = process.env.NODE_ENV === 'production'
+  ? [
+      process.env.FRONTEND_URL,
+      'https://your-frontend-app.onrender.com' // Replace with your actual Render frontend URL
+    ]
+  : [
+      'http://172.16.0.2:8080',
+      'http://localhost:3000',
+      'http://localhost:8080',
+      'http://localhost:8081'
+    ];
+
 app.use(cors({
-  origin: [
-    'http://172.16.0.2:8080',
-    'http://localhost:3000',
-    'http://localhost:8080',
-    'http://localhost:8081'    // ← your React app
-  ],
+  origin: corsOrigins,
   credentials: true,           // allow Set-Cookie if needed
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization','x-gemini-api-key']
@@ -294,13 +308,59 @@ const authenticateJWT = (req, res, next) => {
 //
 
 // -- Health Check Route --
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    message: 'Educational Feedback System Backend is running',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    // Check database connection
+    const dbState = mongoose.connection.readyState;
+    const dbStatus = {
+      0: 'disconnected',
+      1: 'connected', 
+      2: 'connecting', 
+      3: 'disconnecting'
+    }[dbState] || 'unknown';
+
+    // Get basic stats
+    let userCount = 0;
+    try {
+      userCount = await User.countDocuments({});
+    } catch (err) {
+      console.log('Health check: Could not count users:', err.message);
+    }
+
+    const healthData = {
+      status: 'ok', 
+      message: 'Educational Feedback System Backend is running',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      environment: process.env.NODE_ENV || 'development',
+      database: {
+        status: dbStatus,
+        state: dbState,
+        connected: dbState === 1
+      },
+      stats: {
+        totalUsers: userCount,
+        uptime: Math.floor(process.uptime()),
+        memoryUsage: process.memoryUsage()
+      },
+      services: {
+        jwt: !!process.env.JWT_SECRET,
+        mongodb: dbState === 1,
+        cors: true,
+        socketio: true
+      }
+    };
+
+    res.json(healthData);
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Health check failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // -- Authentication Routes --

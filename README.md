@@ -6,6 +6,25 @@
 
 ---
 
+## 🌐 Live Deployment
+
+### Production URLs
+- **Frontend**: [https://your-frontend-app.onrender.com](https://your-frontend-app.onrender.com) (Port 8080)
+- **Backend API**: [https://your-backend-app.onrender.com](https://your-backend-app.onrender.com) (Port 5000)
+- **Health Check**: [https://your-backend-app.onrender.com/api/health](https://your-backend-app.onrender.com/api/health)
+
+### Quick Deploy to Render
+1. **Fork this repository**
+2. **Follow the deployment guides:**
+   - 📋 [Quick Deployment Checklist](DEPLOYMENT_CHECKLIST.md)
+   - 📖 [Detailed Render Guide](RENDER_DEPLOYMENT.md)
+3. **Setup required services:**
+   - MongoDB Atlas (Database)
+   - Firebase (Authentication)
+   - Google APIs (OAuth & Gemini AI)
+
+---
+
 ## 👤 Author Details
 
 - **Project Owner:** Dronadula Sri Nikhil
@@ -62,13 +81,6 @@
 5. **Access the App**
    - Frontend: [http://localhost:8080](http://localhost:8080)
    - Backend: [http://localhost:5000/api/health](http://localhost:5000/api/health)
-
----
-
-## 🌐 Live Demo
-
-> **[Live Page Coming Soon!](https://github.com/SRINIKHIL2005/EDUGALXY)**
-> (Deploy to Vercel, Netlify, or your preferred platform. See below for deployment instructions.)
 
 ---
 

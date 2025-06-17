@@ -1,11 +1,12 @@
 // Deployment configuration for Vite-based React app
 export const DEPLOYMENT_CONFIG = {
-  // GitHub Pages deployment
-  IS_GITHUB_PAGES: true,
-  BASE_PATH: '/EDUGALXY',
+  // Render deployment configuration
+  IS_RENDER: !!import.meta.env.VITE_RENDER_DEPLOYMENT,
+  IS_GITHUB_PAGES: !import.meta.env.VITE_RENDER_DEPLOYMENT,
+  BASE_PATH: import.meta.env.VITE_RENDER_DEPLOYMENT ? '/' : '/EDUGALXY',
   
   // Build configuration
-  BUILD_OUTPUT_DIR: 'docs',
+  BUILD_OUTPUT_DIR: import.meta.env.VITE_RENDER_DEPLOYMENT ? 'dist' : 'docs',
   VITE_BUILD: true,
   
   // API Configuration
@@ -13,11 +14,11 @@ export const DEPLOYMENT_CONFIG = {
   
   // Feature flags for deployment
   FEATURES: {
-    // Disable backend-dependent features if no API URL
-    ENABLE_AUTH: !!import.meta.env.VITE_API_BASE_URL,
+    // Enable backend-dependent features when API URL is available
+    ENABLE_AUTH: !!import.meta.env.VITE_API_BASE_URL || import.meta.env.DEV,
     ENABLE_AI_FEATURES: !!import.meta.env.VITE_GEMINI_API_KEY,
-    ENABLE_REALTIME: !!import.meta.env.VITE_API_BASE_URL,
-    DEMO_MODE: !import.meta.env.VITE_API_BASE_URL,
+    ENABLE_REALTIME: !!import.meta.env.VITE_API_BASE_URL || import.meta.env.DEV,
+    DEMO_MODE: !import.meta.env.VITE_API_BASE_URL && !import.meta.env.DEV,
   }
 };
 

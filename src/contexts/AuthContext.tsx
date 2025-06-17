@@ -26,7 +26,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = `http://${window.location.hostname}:5000/api`;
+const API_URL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:5000/api`;
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -71,7 +71,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   authAxios.interceptors.request.use(
     (config) => {
       if (!config.headers) {
-        config.headers = {};
+        config.headers = new axios.AxiosHeaders();
       }
       if (token && isTokenExpired(token)) {
         // Token is expired, do not attach it to the request
