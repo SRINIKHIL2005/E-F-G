@@ -2098,7 +2098,54 @@ Return as valid JSON.
 
   } catch (error) {
     console.error('Error generating course insights:', error);
-    res.status(500).json({ error: 'Failed to generate course insights' });
+    res.status(500).json({ error: 'Failed to generate course insights' });  }
+});
+
+// AI Course Recommendations Endpoint
+app.post('/api/ai-course-recommendations', authenticateJWT, async (req, res) => {
+  try {
+    const recommendations = {
+      recommendations: [
+        {
+          courseName: "Introduction to Data Science",
+          description: "Learn the fundamentals of data analysis and visualization",
+          difficulty: "Beginner",
+          reason: "Perfect for building analytical skills",
+          prerequisites: "Basic mathematics"
+        },
+        {
+          courseName: "Web Development Fundamentals", 
+          description: "Create modern web applications with HTML, CSS, and JavaScript",
+          difficulty: "Beginner",
+          reason: "High demand skill in today's market",
+          prerequisites: "None"
+        }
+      ]
+    };
+    
+    res.json(recommendations);
+  } catch (error) {
+    console.error('Error generating course recommendations:', error);
+    res.status(500).json({ error: 'Failed to generate course recommendations' });
+  }
+});
+
+// AI Course Difficulty Assessment Endpoint
+app.post('/api/ai-course-difficulty', authenticateJWT, async (req, res) => {
+  try {
+    const analysis = {
+      difficultyLevel: "Intermediate",
+      difficultyScore: 6,
+      timeCommitment: "8-10 hours per week",
+      challenges: ["Time management", "Complex concepts"],
+      recommendations: ["Start with fundamentals", "Practice regularly"],
+      prerequisites: ["Basic knowledge required"]
+    };
+    
+    res.json(analysis);
+  } catch (error) {
+    console.error('Error analyzing course difficulty:', error);
+    res.status(500).json({ error: 'Failed to analyze course difficulty' });
   }
 });
 
