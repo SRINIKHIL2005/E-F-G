@@ -1864,27 +1864,6 @@ app.post('/api/ai/generate-feedback', authenticateJWT, async (req, res) => {
 });
 
 // Helper function to generate default suggestions based on question type
-function getDefaultSuggestion(question) {
-  if (!question.type) return 'Great experience overall!';
-  
-  switch(question.type.toLowerCase()) {
-    case 'ratingscale':
-    case 'rating':
-      return '4'; // Good rating
-    case 'multiplechoice':
-      return question.options && question.options.length > 0 ? question.options[0] : 'Good';
-    case 'truefalse':
-    case 'boolean':
-      return 'true';
-    case 'textarea':
-    case 'text':
-    case 'longtext':
-      return 'I found this course informative and well-structured. The content was engaging and the instructor was helpful.';
-    default:
-      return 'Positive feedback';
-  }
-}
-
 // --- AI Schedule Suggestions Endpoint ---
 app.post('/api/ai-schedule-suggestions', authenticateJWT, async (req, res) => {
   try {
