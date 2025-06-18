@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, Transition } from '@headlessui/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
+import API_CONFIG from '@/config/api';
 
 interface Student {
   _id: string;
@@ -64,7 +65,7 @@ const ManageStudents: React.FC<ManageStudentsProps> = ({ department, onDataChang
     password: ''
   });  // API instance
   const apiClient = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000',
+    baseURL: API_CONFIG.BASE_URL,
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'

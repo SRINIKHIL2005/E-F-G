@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'react-hot-toast';
+import API_CONFIG from '@/config/api';
 
 // Import new HOD management components
 import DepartmentCourses from '@/components/hod/DepartmentCourses';
@@ -266,7 +267,7 @@ const HodDashboard = () => {
 
   // API instance with authentication
   const apiClient = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000',
+    baseURL: API_CONFIG.BASE_URL,
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
@@ -279,7 +280,7 @@ const HodDashboard = () => {
     setError(null);
     let data: any = null;
     
-    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+    const baseURL = API_CONFIG.BASE_URL;
     console.log('🌐 API base URL:', baseURL);
     
     try {
@@ -381,7 +382,7 @@ const HodDashboard = () => {
       console.error('❌ Error fetching recent activities:', error);
       // Try fallback approach without authentication for debugging
       try {
-        const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+        const baseURL = API_CONFIG.BASE_URL;
         console.log('⚠️ Trying to fetch recent activities without auth as fallback...');
         // We'll create a debug endpoint if needed, but for now just set empty state
         setRecentActivities([]);
@@ -418,7 +419,7 @@ const HodDashboard = () => {
         console.warn('⚠️ Authenticated analytics endpoint failed, trying debug endpoint...', authError);
         
         // Fallback to non-authenticated debug endpoint
-        const debugResponse = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/hod/debug-analytics`);
+        const debugResponse = await axios.get(`${API_CONFIG.BASE_URL}/api/hod/debug-analytics`);
         const analyticsData = debugResponse.data;
         
         console.log(`✅ Debug endpoint worked! Retrieved analytics data with 
@@ -599,7 +600,7 @@ const HodDashboard = () => {
   const refreshDashboardStats = async () => {
     try {
       console.log('🔄 Refreshing dashboard stats...');
-      const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+      const baseURL = API_CONFIG.BASE_URL;
       
       try {
         const response = await apiClient.get('/api/hod/dashboard-summary');

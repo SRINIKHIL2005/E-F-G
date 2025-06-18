@@ -260,6 +260,7 @@ const StudentFeedback = () => {
 
   // Improved form submission with proper error handling
   const handleFormSubmit = async (formId: string, answers: Answer[]) => {
+    let enhancedAnswers: Answer[] = [];
     try {
       setSubmitting(true);
       setSelectedFormId(formId);
@@ -271,7 +272,7 @@ const StudentFeedback = () => {
       if (!answers.length) {
         throw new Error("Please answer at least one question");
       }
-      const enhancedAnswers = answers.map(answer => {
+      enhancedAnswers = answers.map(answer => {
         const question = form.questions.find(q => q._id === answer.questionId);
         if (!question) {
           throw new Error(`Question not found for answer: ${answer.questionId}`);
@@ -313,10 +314,10 @@ const StudentFeedback = () => {
       if (err.response) {
         // If using axios or similar
         errorMsg = err.response.data?.message || errorMsg;
-      } else if (err instanceof Error && err.name === 'FetchError' && err.response) {
+      } else if (err instanceof Error && err.name === 'FetchError' && 'response' in err) {
         // For fetch errors
         try {
-          const data = await err.response.json();
+          const data = await (err as any).response.json();
           errorMsg = data?.message || errorMsg;
         } catch {}
       } else if (err && err.toString && err.toString().includes('HTTP error!')) {

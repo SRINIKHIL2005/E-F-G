@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
+import API_CONFIG from '@/config/api';
 
 // ---------- Interfaces ----------
 interface Student {
@@ -103,9 +104,8 @@ const TeacherAttendancePortal: React.FC = () => {
           setLoading(false);
           return;
         }
-        
-        let response = await fetch(
-          `${process.env.REACT_APP_BACKEND_URL || ''}/api/students`,
+          let response = await fetch(
+          `${API_CONFIG.BASE_URL}/api/students`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
 
@@ -187,7 +187,7 @@ const TeacherAttendancePortal: React.FC = () => {
       };
       
       const response = await fetch(
-        `${process.env.REACT_APP_BACKEND_URL || ''}/api/attendance`,
+        `${API_CONFIG.BASE_URL}/api/attendance`,
         {
           method: 'POST',
           headers: {
@@ -329,7 +329,7 @@ ${departments.map(dept => {
         queryParams.append('date', historyDate);
       }
       
-      const url = `${process.env.REACT_APP_BACKEND_URL || ''}/api/attendance${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+      const url = `${API_CONFIG.BASE_URL}/api/attendance${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
