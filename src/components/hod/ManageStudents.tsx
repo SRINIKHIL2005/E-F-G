@@ -84,7 +84,7 @@ const ManageStudents: React.FC<ManageStudentsProps> = ({ department, onDataChang
         console.log('✅ Authenticated students endpoint worked! Received', studentData.length, 'student records');
       } catch (authError) {
         console.warn('⚠️ Authenticated students endpoint failed, trying debug endpoint...', authError);        // Fallback to non-authenticated debug endpoint
-        const debugResponse = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/hod/debug-students`);
+        const debugResponse = await axios.get(`${API_CONFIG.BASE_URL}/api/hod/debug-students`);
         
         // Handle both array and {students: [...]} response formats
         const studentData = Array.isArray(debugResponse.data) ? debugResponse.data : debugResponse.data.students || [];
@@ -118,7 +118,7 @@ const ManageStudents: React.FC<ManageStudentsProps> = ({ department, onDataChang
         console.warn('⚠️ Authenticated courses endpoint failed, trying debug endpoint...', authError);
         
         // Fallback to non-authenticated debug endpoint
-        const debugResponse = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/hod/debug-courses`);
+        const debugResponse = await axios.get(`${API_CONFIG.BASE_URL}/api/hod/debug-courses`);
         
         // Handle both array and {courses: [...]} response formats
         const courseData = Array.isArray(debugResponse.data) ? debugResponse.data : debugResponse.data.courses || [];
