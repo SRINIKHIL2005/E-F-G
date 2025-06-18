@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import API_CONFIG from '@/config/api';
 import { AlertCircle, RefreshCw, MessageSquare, ThumbsUp, ThumbsDown, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -91,7 +92,7 @@ const getApiBaseUrl = () => {
   return 'http://localhost:5000'; // Default fallback, adjust as necessary
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const API_BASE_URL = API_CONFIG.BASE_URL;
 
 // Helper function to generate anonymized student identifiers
 const getAnonymizedIdentifier = (index) => {

@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Search, AlertCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import Spinner from "@/components/ui/spinner";
+import API_CONFIG from '@/config/api';
 
 // Helper to get backend URL
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = API_CONFIG.BASE_URL;
 
 // Define interfaces for our data types
 interface FeedbackForm {
