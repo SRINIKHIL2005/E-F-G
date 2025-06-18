@@ -20,6 +20,9 @@ interface SecureSignUpFormProps {
 }
 
 const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading, error }) => {
+  // Force deployment update - v2.0 NO VALIDATION VERSION
+  console.log('🆕 SecureSignUpForm v2.0 - NO VALIDATION LOADED');
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -160,6 +163,7 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
   };  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('🆕 NEW VERSION v2.0: NO VALIDATION BARRIERS');
     console.log('🔍 SIMPLE REGISTRATION: No validation barriers');
     console.log('📝 Form data:', formData);
     
