@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
+import API_CONFIG from '@/config/api';
 
 interface Course {
   _id: string;
@@ -41,7 +42,7 @@ interface AIDifficultyAssessment {
   };
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const API_BASE_URL = API_CONFIG.BASE_URL;
 
 const StudentCoursesPage: React.FC = () => {
   const { user, token } = useAuth();

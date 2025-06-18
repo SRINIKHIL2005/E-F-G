@@ -12,16 +12,20 @@ const SignUpPage: React.FC = () => {
 
   const handleSignUp = async (formData: any) => {
     setIsLoading(true);
-    setError('');
-
-    try {
+    setError('');    try {
+      console.log('🔍 Sending registration data:', JSON.stringify(formData, null, 2));
+      
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
-      });      const data = await response.json();
+      });
+
+      console.log('📡 Response status:', response.status);
+      const data = await response.json();
+      console.log('📝 Response data:', data);
 
       if (response.ok) {
         // Registration successful
@@ -34,10 +38,12 @@ const SignUpPage: React.FC = () => {
         // Show detailed validation errors if available
         let errorMessage = data.message || 'Registration failed. Please try again.';
         if (data.errors && Array.isArray(data.errors)) {
-          errorMessage = data.errors.map((err: any) => err.msg).join(', ');
+          const validationErrors = data.errors.map((err: any) => `${err.path || err.param || 'Field'}: ${err.msg}`);
+          errorMessage = validationErrors.join('\n');
+          console.error('🚨 Detailed validation errors:', data.errors);
         }
         setError(errorMessage);
-        console.error('Registration validation errors:', data);
+        console.error('❌ Registration failed:', data);
       }
     } catch (error) {
       console.error('Registration error:', error);

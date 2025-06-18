@@ -48,21 +48,31 @@ router.post('/register', [
     .withMessage('Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character'),
   body('role').isIn(['student', 'teacher', 'hod', 'admin']).withMessage('Invalid role'),
   body('department').notEmpty().withMessage('Department is required'),
+  body('phone').optional().matches(/^\+?[\d\s\-\(\)]+$/).withMessage('Invalid phone number format'),
   body('termsVersion').notEmpty().withMessage('Terms version is required'),
   body('privacyVersion').notEmpty().withMessage('Privacy version is required'),
   body('termsOfServiceVersion').notEmpty().withMessage('Terms of Service version is required'),
   body('dataProcessingConsent').equals('true').withMessage('Data processing consent is required'),
-  body('marketingConsent').optional().isBoolean()
+  body('marketingConsent').optional().isBoolean().withMessage('Marketing consent must be a boolean')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.error('Registration validation errors:', errors.array());
-      console.error('Request body:', req.body);
+      console.error('❌ Registration validation errors:', errors.array());
+      console.error('📝 Request body received:', JSON.stringify(req.body, null, 2));
+      
+      // Create a detailed error response
+      const errorDetails = errors.array().map(err => ({
+        field: err.path || err.param,
+        message: err.msg,
+        value: err.value
+      }));
+      
       return res.status(400).json({
         success: false,
         message: 'Validation errors',
-        errors: errors.array()
+        errors: errors.array(),
+        details: errorDetails
       });
     }
 
@@ -72,6 +82,7 @@ router.post('/register', [
       password, 
       role, 
       department,
+      phone,
       termsVersion,
       privacyVersion,
       termsOfServiceVersion,
@@ -104,6 +115,7 @@ router.post('/register', [
       password,
       role,
       department,
+      phone: phone || undefined, // Only include phone if provided
     });
     
     await user.save();
