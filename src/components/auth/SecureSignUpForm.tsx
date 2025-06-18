@@ -202,11 +202,11 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
         console.error('Email check failed:', error);
       }      onSubmit({
         ...formData,
-        termsVersion: '1.0',  // Adding required version fields
+        termsVersion: '1.0',
         privacyVersion: '1.0', 
         termsOfServiceVersion: '1.0',
-        dataProcessingConsent: 'true',  // Backend requires string 'true' not boolean
-        marketingConsent: marketingConsent  // Backend expects boolean
+        dataProcessingConsent: 'true',  // Always true since it's required
+        marketingConsent: marketingConsent
       });
     }
   };

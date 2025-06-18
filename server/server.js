@@ -1684,25 +1684,82 @@ app.post('/api/ai-feedback-suggest', authenticateJWT, async (req, res) => {
 
     // Check if GEMINI_API_KEY is available
     const apiKey = process.env.GEMINI_API_KEY;
-console.log('🔑 GEMINI_API_KEY available:', apiKey ? 'Yes' : 'No');
-    const hodData = await User.findById(req.user.id);
-    console.log('🔑 GEMINI_API_KEY value:', apiKey ? `${apiKey.substring(0, 10)}...` : 'None');
+    console.log('🔑 GEMINI_API_KEY available:', apiKey ? 'Yes' : 'No');
     
     if (!apiKey) {
       console.error('GEMINI_API_KEY not found in environment variables');
-      return res.status(500).json({ error: 'Configuration Error', message: 'AI service not configured' });
+      // Provide fallback suggestions instead of failing
+      const suggestions = {};
+      questions.forEach((question, index) => {
+        const questionId = question.id || question._id || index;
+        suggestions[questionId] = getDefaultSuggestion(question);
+      });
+      return res.json({ suggestions });
     }
-    
-    const attendanceRecords = await Attendance.find({ department: hodData.department })
-      .sort({ date: -1 })
-      .limit(100); // Limit to recent records for performance
-    
-    res.json(attendanceRecords);
+
+    // Generate AI suggestions using Gemini API
+    const prompt = `Generate helpful feedback responses for these questions. Provide brief, constructive, and positive responses for each:
+${questions.map((q, i) => `${i + 1}. ${q.question || q.text || q.title || 'Question'}`).join('\n')}
+
+Format: One response per line, numbered 1-${questions.length}.`;
+
+    try {
+      const response = await fetchGeminiAPI('gemini-1.5-flash', prompt);
+      
+      // Parse AI response into suggestions
+      const suggestions = {};
+      const lines = response.split('\n').filter(line => line.trim().length > 0);
+      
+      questions.forEach((question, index) => {
+        const questionId = question.id || question._id || index;
+        let suggestion = '';
+        
+        // Look for numbered response
+        const numberPattern = new RegExp(`^\\s*${index + 1}[\\.\\)\\-\\s]`);
+        const matchingLine = lines.find(line => numberPattern.test(line));
+        
+        if (matchingLine) {
+          suggestion = matchingLine.replace(/^\s*\d+[\.\)\-\s]*/, '').trim();
+        } else if (lines[index]) {
+          suggestion = lines[index].replace(/^\s*\d+[\.\)\-\s]*/, '').trim();
+        } else {
+          suggestion = getDefaultSuggestion(question);
+        }
+        
+        suggestions[questionId] = suggestion || 'Thank you for your feedback!';
+      });
+
+      res.json({ suggestions });
+    } catch (aiError) {
+      console.error('AI API error:', aiError);
+      // Fallback to default suggestions
+      const suggestions = {};
+      questions.forEach((question, index) => {
+        const questionId = question.id || question._id || index;
+        suggestions[questionId] = getDefaultSuggestion(question);
+      });
+      res.json({ suggestions });
+    }
   } catch (error) {
-    console.error('Error fetching attendance summary:', error);
+    console.error('Error generating feedback suggestions:', error);
     res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 });
+
+// Helper function for default suggestions
+function getDefaultSuggestion(question) {
+  const questionText = (question.question || question.text || question.title || '').toLowerCase();
+  
+  if (questionText.includes('rating') || questionText.includes('rate')) {
+    return 'Thank you for your rating. Your feedback helps us improve.';
+  } else if (questionText.includes('improve') || questionText.includes('suggestion')) {
+    return 'We appreciate your suggestions for improvement.';
+  } else if (questionText.includes('recommend')) {
+    return 'Thank you for your recommendation.';
+  } else {
+    return 'Thank you for your valuable feedback!';
+  }
+}
 
 // This section got corrupted and has been restored
 
