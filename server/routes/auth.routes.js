@@ -65,6 +65,21 @@ router.post('/register', [
       marketingConsent = false
     } = req.body;
     
+    console.log('✅ Extracted data:', {
+      name, email, password: password ? '***' : 'MISSING', 
+      role, department, phone, termsVersion, privacyVersion, 
+      termsOfServiceVersion, dataProcessingConsent, marketingConsent
+    });
+    
+    // Basic safety checks (not validation, just preventing crashes)
+    if (!name || !email || !password) {
+      console.error('❌ Missing basic required fields');
+      return res.status(400).json({
+        success: false,
+        message: 'Missing basic required fields: name, email, password'
+      });
+    }
+    
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -145,19 +160,34 @@ router.post('/register', [
       message: 'Registration successful'
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    await SecurityLog.create({
-      action: 'registration_error',
-      level: 'error',
-      details: {
-        error: error.message,
-        ip: req.ip,
-        userAgent: req.get('User-Agent')
-      }
-    });
+    console.error('❌ DETAILED Registration error:');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Error name:', error.name);
+    console.error('Request body that caused error:', JSON.stringify(req.body, null, 2));
+    
+    // Try to create security log, but don't fail if this also errors
+    try {
+      await SecurityLog.create({
+        action: 'registration_error',
+        level: 'error',
+        details: {
+          error: error.message,
+          errorStack: error.stack,
+          requestBody: req.body,
+          ip: req.ip,
+          userAgent: req.get('User-Agent')
+        }
+      });
+    } catch (logError) {
+      console.error('❌ Could not log error to SecurityLog:', logError.message);
+    }
+    
     res.status(500).json({ 
       success: false,
-      message: 'Server error during registration' 
+      message: 'Server error during registration',
+      error: error.message, // Include actual error for debugging
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined 
     });
   }
 });
