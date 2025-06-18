@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { NodeGlobalsPolyfillPlugin } from "@esbuild-plugins/node-globals-polyfill";
 
+// E-F-G Platform v2.1.0 - Force rebuild with registration validation fixes
 export default defineConfig(({ mode }) => {
   const isRenderDeployment = process.env.VITE_RENDER_DEPLOYMENT === 'true' || mode === 'production';
   
