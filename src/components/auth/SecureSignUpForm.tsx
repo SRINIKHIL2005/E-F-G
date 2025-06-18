@@ -204,13 +204,11 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
       
       onSubmit({
         ...formData,
-        consents: {
-          terms: acceptedTerms,
-          termsOfService: acceptedTermsOfService,
-          privacy: acceptedPrivacy,
-          dataProcessing: dataProcessingConsent,
-          marketing: marketingConsent
-        }
+        termsVersion: '1.0',  // Adding required version fields
+        privacyVersion: '1.0', 
+        termsOfServiceVersion: '1.0',
+        dataProcessingConsent: dataProcessingConsent,
+        marketingConsent: marketingConsent
       });
     }
   };
