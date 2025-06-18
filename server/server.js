@@ -30,6 +30,10 @@ console.log('JWT_SECRET value:', process.env.JWT_SECRET || 'Using fallback: your
 
 // 2️⃣ Initialize Express and HTTP Server
 const app = express();
+
+// Trust proxy for rate limiting (required for Render deployment)
+app.set('trust proxy', 1);
+
 const server = createServer(app);
 const PORT = process.env.PORT || 5000;
 

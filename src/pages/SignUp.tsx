@@ -5,6 +5,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
 import SecureSignUpForm from '@/components/auth/SecureSignUpForm';
 
+// Enhanced registration with detailed validation error reporting - v2.1
+
 const SignUpPage: React.FC = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
