@@ -200,14 +200,22 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
         }
       } catch (error) {
         console.error('Email check failed:', error);
-      }      onSubmit({
-        ...formData,
+      }      // Remove confirmPassword and add required fields
+      const registrationData = {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        department: formData.department,
+        phone: formData.phone,
         termsVersion: '1.0',
         privacyVersion: '1.0', 
         termsOfServiceVersion: '1.0',
         dataProcessingConsent: 'true',  // Always true since it's required
         marketingConsent: marketingConsent
-      });
+      };
+      
+      onSubmit(registrationData);
     }
   };
 

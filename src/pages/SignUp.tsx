@@ -21,9 +21,7 @@ const SignUpPage: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
+      });      const data = await response.json();
 
       if (response.ok) {
         // Registration successful
@@ -33,7 +31,13 @@ const SignUpPage: React.FC = () => {
           }
         });
       } else {
-        setError(data.message || 'Registration failed. Please try again.');
+        // Show detailed validation errors if available
+        let errorMessage = data.message || 'Registration failed. Please try again.';
+        if (data.errors && Array.isArray(data.errors)) {
+          errorMessage = data.errors.map((err: any) => err.msg).join(', ');
+        }
+        setError(errorMessage);
+        console.error('Registration validation errors:', data);
       }
     } catch (error) {
       console.error('Registration error:', error);
