@@ -166,8 +166,7 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
     console.log('🆕 NEW VERSION v2.0: NO VALIDATION BARRIERS');
     console.log('🔍 SIMPLE REGISTRATION: No validation barriers');
     console.log('📝 Form data:', formData);
-    
-    // Create complete registration data with ALL required backend fields
+      // Create complete registration data with ALL required backend fields
     const registrationData = {
       name: formData.name || 'Test User',
       email: formData.email || 'test@example.com',
@@ -178,7 +177,7 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
       termsVersion: '1.0',
       privacyVersion: '1.0', 
       termsOfServiceVersion: '1.0',
-      dataProcessingConsent: true,
+      dataProcessingConsent: 'true', // MUST BE STRING 'true' not boolean
       marketingConsent: true
     };
     
@@ -188,7 +187,6 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
     
     onSubmit(registrationData);
   };
-
   // Emergency bypass function for immediate registration
   const emergencyBypassSubmit = () => {
     console.log('🚨 EMERGENCY BYPASS: Submitting registration data directly');
@@ -203,7 +201,7 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
       termsVersion: '1.0',
       privacyVersion: '1.0',
       termsOfServiceVersion: '1.0',
-      dataProcessingConsent: 'true',
+      dataProcessingConsent: 'true', // MUST BE STRING 'true' not boolean
       marketingConsent: true
     };
     

@@ -11,7 +11,7 @@ const testRegistrationData = {
   termsVersion: '1.0',
   privacyVersion: '1.0', 
   termsOfServiceVersion: '1.0',
-  dataProcessingConsent: true,
+  dataProcessingConsent: 'true', // MUST BE STRING 'true' - backend expects this!
   marketingConsent: true
 };
 
