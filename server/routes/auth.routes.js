@@ -38,6 +38,19 @@ router.get('/check-email', async (req, res) => {
   }
 });
 
+// SIMPLE TEST ROUTE - NO DATABASE, NO VALIDATION
+router.post('/test-register', async (req, res) => {
+  console.log('🧪 TEST ROUTE: Simple registration test');
+  console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
+  
+  res.status(200).json({
+    success: true,
+    message: 'Test registration endpoint working!',
+    receivedData: req.body,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Register a new user with security and legal compliance
 router.post('/register', [
   apiLimiter,
