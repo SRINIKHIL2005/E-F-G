@@ -26,7 +26,7 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
     password: '',
     confirmPassword: '',
     department: '',
-    role: 'student',
+    role: 'student', // Ensure default role is always set
     phone: ''
   });
     const [showPassword, setShowPassword] = useState(false);
@@ -160,9 +160,18 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
     if (passwordStrength < 40) return 'Weak';
     if (passwordStrength < 70) return 'Medium';
     return 'Strong';
-  };
-  const handleSubmit = async (e: React.FormEvent) => {
+  };  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    console.log('🔍 Registration form submission started');
+    console.log('📝 Current form data:', formData);
+    console.log('✅ Consent states:', {
+      acceptedTerms,
+      acceptedTermsOfService, 
+      acceptedPrivacy,
+      dataProcessingConsent,
+      marketingConsent
+    });
     
     // Validate all fields
     const allErrors: Record<string, string> = {};
@@ -186,9 +195,29 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
     if (!acceptedPrivacy) allErrors.privacy = 'You must accept the Privacy Policy';
     if (!dataProcessingConsent) allErrors.dataProcessing = 'Data processing consent is required';
     
+    console.log('🔍 Validation errors found:', allErrors);
     setFieldErrors(allErrors);
     
+    // Create complete registration data structure (with ALL required backend fields)
+    const registrationData = {
+      name: (formData.name || '').trim(),
+      email: (formData.email || '').trim().toLowerCase(),
+      password: formData.password || '',
+      role: formData.role || 'student',
+      department: (formData.department || '').trim(),
+      phone: (formData.phone || '').trim() || undefined,
+      termsVersion: '1.0',
+      privacyVersion: '1.0', 
+      termsOfServiceVersion: '1.0',
+      dataProcessingConsent: 'true',
+      marketingConsent: Boolean(marketingConsent)
+    };
+    
+    console.log('🚀 Complete registration data to be sent:', registrationData);
+    
     if (Object.keys(allErrors).length === 0) {
+      console.log('✅ All validations passed, proceeding with registration');
+      
       // Check email uniqueness before submitting
       try {
         const emailCheckResponse = await fetch(`/api/auth/check-email?email=${encodeURIComponent(formData.email)}`);
@@ -200,23 +229,12 @@ const SecureSignUpForm: React.FC<SecureSignUpFormProps> = ({ onSubmit, isLoading
         }
       } catch (error) {
         console.error('Email check failed:', error);
-      }      // Remove confirmPassword and add required fields
-      const registrationData = {
-        name: formData.name.trim(),
-        email: formData.email.trim(),
-        password: formData.password,
-        role: formData.role,
-        department: formData.department.trim(),
-        phone: formData.phone.trim() || undefined, // Don't send empty phone
-        termsVersion: '1.0',
-        privacyVersion: '1.0', 
-        termsOfServiceVersion: '1.0',
-        dataProcessingConsent: 'true',  // Always true since it's required
-        marketingConsent: Boolean(marketingConsent)
-      };
+      }
       
-      console.log('🚀 Final registration data:', registrationData);
+      console.log('📤 Calling onSubmit with registration data');
       onSubmit(registrationData);
+    } else {
+      console.error('❌ Form validation failed, not submitting:', allErrors);
     }
   };
 

@@ -11,10 +11,15 @@ const SignUpPage: React.FC = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-
   const handleSignUp = async (formData: any) => {
     setIsLoading(true);
-    setError('');    try {
+    setError('');
+
+    console.log('🎯 SignUp.tsx received data from form:', formData);
+    console.log('🔢 Number of fields received:', Object.keys(formData || {}).length);
+    console.log('📋 Field names received:', Object.keys(formData || {}));
+
+    try {
       console.log('🔍 Sending registration data:', JSON.stringify(formData, null, 2));
       
       const response = await fetch('/api/auth/register', {
