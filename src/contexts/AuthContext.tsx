@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, UserRole } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import axios from 'axios';
+import API_CONFIG from '@/config/api';
 
 type AxiosInstance = ReturnType<typeof axios.create>;
 
@@ -26,7 +27,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:5000/api`;
+const API_URL = `${API_CONFIG.BASE_URL}/api`;
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
