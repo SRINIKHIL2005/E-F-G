@@ -496,8 +496,7 @@ const AIQuizArena: React.FC = () => {
       const questions = quizData.quiz?.questions || quizData.questions;
       
       if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        throw new Error('No valid questions received from API');
-      }
+        throw new Error('No valid questions received from API');      }
       
       const session: QuizSession = {
         id: Date.now().toString(),
@@ -507,7 +506,7 @@ const AIQuizArena: React.FC = () => {
         questions: questions,
         currentQuestionIndex: 0,
         score: 0,
-        lives: mode === 'survival' ? 3 : 1,
+        lives: mode === 'survival' ? 3 : 1, // Ensure survival mode always gets exactly 3 lives
         timeRemaining: 0,
         streak: 0,
         powerUps: [],
@@ -537,9 +536,7 @@ const AIQuizArena: React.FC = () => {
     if (!quiz || !quiz.questions || quiz.questions.length === 0) {
       toast.error('No valid questions generated from files');
       return;
-    }
-
-    const session: QuizSession = {
+    }    const session: QuizSession = {
       id: Date.now().toString(),
       mode: selectedGameMode as any,
       category: 'Uploaded Content',
@@ -547,7 +544,7 @@ const AIQuizArena: React.FC = () => {
       questions: quiz.questions,
       currentQuestionIndex: 0,
       score: 0,
-      lives: selectedGameMode === 'survival' ? 3 : 1,
+      lives: selectedGameMode === 'survival' ? 3 : 1, // Ensure survival mode always gets exactly 3 lives
       timeRemaining: 0,
       streak: 0,
       powerUps: [],
@@ -572,9 +569,14 @@ const AIQuizArena: React.FC = () => {
     setSelectedGameMode(mode);
     setShowDocumentUploader(true);
   };
-
   const handleAnswerSelect = (answerIndex: number) => {
     if (selectedAnswer !== null || !currentSession) return;
+    
+    // Route to multiplayer handler if in multiplayer mode
+    if (currentSession.mode === 'multiplayer' && multiplayerState.roomId) {
+      handleMultiplayerAnswerSelect(answerIndex);
+      return;
+    }
     
     setSelectedAnswer(answerIndex);
     const question = currentSession.questions[currentSession.currentQuestionIndex];
@@ -582,7 +584,7 @@ const AIQuizArena: React.FC = () => {
     
     if (soundEnabled) {
       playSound(isCorrect ? 'correct' : 'wrong');
-    }    if (isCorrect) {
+    }if (isCorrect) {
       let points = question.points;
       
       // Apply double points power-up
@@ -606,18 +608,31 @@ const AIQuizArena: React.FC = () => {
       
       if (!activePowerUps.doublePoints) {
         toast.success(`+${points} points!`);
-      }
-    }else {
-      const newLives = currentSession.lives - 1;
-      setCurrentSession(prev => prev ? {
-        ...prev,
-        lives: newLives,
-        streak: 0
-      } : null);
-      
-      if (newLives <= 0 && currentSession.mode === 'survival') {
-        endQuiz();
-        return;
+      }    } else {
+      // Wrong answer - deduct life in survival mode
+      if (currentSession.mode === 'survival') {
+        const newLives = Math.max(0, currentSession.lives - 1);
+        setCurrentSession(prev => prev ? {
+          ...prev,
+          lives: newLives,
+          streak: 0
+        } : null);
+        
+        toast.error(`Wrong answer! Lives remaining: ${newLives}`);
+        
+        if (newLives <= 0) {
+          toast.error('Game Over! No lives remaining.');
+          endQuiz();
+          return;
+        }
+      } else {
+        // Non-survival mode - just reset streak
+        setCurrentSession(prev => prev ? {
+          ...prev,
+          streak: 0
+        } : null);
+        
+        toast.error('Wrong answer!');
       }
     }
 
@@ -649,22 +664,26 @@ const AIQuizArena: React.FC = () => {
     setShowExplanation(false);
     setTimeLeft(currentSession.questions[nextIndex].timeLimit);
   };
-
   const handleTimeout = () => {
     if (!currentSession) return;
     
-    const newLives = currentSession.lives - 1;
-    setCurrentSession(prev => prev ? {
-      ...prev,
-      lives: newLives,
-      streak: 0
-    } : null);
-    
-    toast.error('Time\'s up!');
-    
-    if (newLives <= 0 && currentSession.mode === 'survival') {
-      endQuiz();
-      return;
+    if (currentSession.mode === 'survival') {
+      const newLives = Math.max(0, currentSession.lives - 1);
+      setCurrentSession(prev => prev ? {
+        ...prev,
+        lives: newLives,
+        streak: 0
+      } : null);
+      
+      toast.error(`Time's up! Lives remaining: ${newLives}`);
+      
+      if (newLives <= 0) {
+        toast.error('Game Over! No lives remaining.');
+        endQuiz();
+        return;
+      }
+    } else {
+      toast.error('Time\'s up!');
     }
 
     setTimeout(() => {
@@ -889,8 +908,7 @@ const AIQuizArena: React.FC = () => {
   const handleStartMultiplayerQuiz = (category: string, mode: string) => {
     if (!socket) return;
 
-    socket.emit('start_quiz', { userId: user?.id, roomCode, category, mode }, (response: any) => {
-      if (response.success) {
+    socket.emit('start_quiz', { userId: user?.id, roomCode, category, mode }, (response: any) => {      if (response.success) {
         const { questions } = response;
         const session: QuizSession = {
           id: Date.now().toString(),
@@ -900,7 +918,7 @@ const AIQuizArena: React.FC = () => {
           questions: questions,
           currentQuestionIndex: 0,
           score: 0,
-          lives: mode === 'survival' ? 3 : 1,
+          lives: mode === 'survival' ? 3 : 1, // Ensure survival mode always gets exactly 3 lives
           timeRemaining: 0,
           streak: 0,
           powerUps: [],
@@ -1142,13 +1160,28 @@ const AIQuizArena: React.FC = () => {
         opponentAnswered: false
       }));
       
-      // Show result feedback
+      // Show result feedback with correct answer and explanation
       if (myResult) {
+        const currentQ = currentSession?.questions[currentSession.currentQuestionIndex];
+        const correctAnswerText = currentQ?.options[correctAnswer] || 'Unknown';
+        
         const message = myResult.isCorrect 
           ? `✅ Correct! +${myResult.points} points`
-          : `❌ Wrong. Correct answer: ${correctAnswer}`;
+          : `❌ Wrong. Correct answer: ${correctAnswerText}`;
         toast.success(message);
+        
+        // Show explanation in multiplayer mode
+        if (explanation) {
+          setTimeout(() => {
+            toast.success(`💡 Explanation: ${explanation}`, { duration: 4000 });
+          }, 1000);
+        }
       }
+      
+      // Show explanation immediately for multiplayer
+      setTimeout(() => {
+        setShowExplanation(true);
+      }, 1500);
     });
 
     socket.on('next-question', (data: any) => {

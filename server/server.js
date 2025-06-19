@@ -28,6 +28,49 @@ dotenv.config();
 console.log('JWT_SECRET loaded:', process.env.JWT_SECRET ? 'Yes' : 'No');
 console.log('JWT_SECRET value:', process.env.JWT_SECRET || 'Using fallback: your_jwt_secret');
 
+// 1.5️⃣ Global question cache to prevent repetition
+const questionCache = new Map(); // Map<subject_difficulty_gameMode, Set<questionHashes>>
+const CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes
+
+function getCacheKey(subject, difficulty, gameMode) {
+  return `${subject}_${difficulty}_${gameMode}`.toLowerCase();
+}
+
+function getQuestionHash(question) {
+  // Create a hash of the question to identify duplicates
+  return `${question.toLowerCase().substring(0, 50)}_${Date.now()}`;
+}
+
+function addQuestionsToCache(subject, difficulty, gameMode, questions) {
+  const key = getCacheKey(subject, difficulty, gameMode);
+  if (!questionCache.has(key)) {
+    questionCache.set(key, {
+      questions: new Set(),
+      timestamp: Date.now()
+    });
+  }
+  
+  const cache = questionCache.get(key);
+  questions.forEach(q => {
+    if (q.question) {
+      cache.questions.add(getQuestionHash(q.question));
+    }
+  });
+}
+
+function getUsedQuestions(subject, difficulty, gameMode) {
+  const key = getCacheKey(subject, difficulty, gameMode);
+  const cache = questionCache.get(key);
+  
+  if (!cache || (Date.now() - cache.timestamp) > CACHE_EXPIRY) {
+    // Cache expired or doesn't exist
+    questionCache.delete(key);
+    return [];
+  }
+  
+  return Array.from(cache.questions);
+}
+
 // 2️⃣ Initialize Express and HTTP Server
 const app = express();
 
@@ -2871,7 +2914,8 @@ app.post('/api/ai/generate-quiz-arena', authenticateJWT, async (req, res) => {
       questionCount = 5, 
       gameMode = 'classic',
       topics = [],
-      previousQuestions = []
+      previousQuestions = [],
+      uniqueSeed = null
     } = req.body;
     
     const geminiApiKey = req.body.geminiApiKey || process.env.GEMINI_API_KEY;
@@ -2883,6 +2927,10 @@ app.post('/api/ai/generate-quiz-arena', authenticateJWT, async (req, res) => {
     if (!subject) {
       return res.status(400).json({ error: 'Subject is required' });
     }
+
+    // Get previously used questions to avoid repetition
+    const usedQuestions = getUsedQuestions(subject, difficulty, gameMode);
+    const allPreviousQuestions = [...previousQuestions, ...usedQuestions];
 
     // Build dynamic prompt based on game mode and settings
     let promptModifier = '';
@@ -2896,25 +2944,25 @@ app.post('/api/ai/generate-quiz-arena', authenticateJWT, async (req, res) => {
       case 'multiplayer':
         promptModifier = 'Create unique, engaging questions perfect for competitive multiplayer gameplay. Ensure each question is different and challenging.';
         break;
+        break;
       default:
         promptModifier = 'Create well-balanced educational questions for classic quiz mode.';
-    }
-
-    const topicsText = topics.length > 0 ? `Focus on these specific topics: ${topics.join(', ')}` : '';
-    const previousQuestionsText = previousQuestions.length > 0 
-      ? `IMPORTANT: Avoid repeating these question topics or similar questions: ${previousQuestions.join(', ')}. Make questions completely unique and different.` 
+    }    const topicsText = topics.length > 0 ? `Focus on these specific topics: ${topics.join(', ')}` : '';
+    const previousQuestionsText = allPreviousQuestions.length > 0 
+      ? `IMPORTANT: Avoid repeating these question topics or similar questions: ${allPreviousQuestions.join(', ')}. Make questions completely unique and different.` 
       : '';
       // Add uniqueness enforcer for multiplayer and timestamp for uniqueness
     const uniquenessText = gameMode === 'multiplayer' 
       ? `CRITICAL: Generate completely unique questions that are different from any common quiz questions. Use varied question types and ensure no repetition. Add timestamp context: ${Date.now()}`
-      : '';
+      : `IMPORTANT: Ensure questions are unique and avoid repetition from previous sessions.`;
     
     // Add session-specific seed for more uniqueness
-    const sessionSeed = `SESSION_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const sessionSeed = uniqueSeed || `SESSION_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     const prompt = `Generate ${questionCount} multiple-choice quiz questions for: ${subject}
     
 SESSION IDENTIFIER: ${sessionSeed}
+UNIQUENESS LEVEL: ${gameMode === 'multiplayer' ? 'MAXIMUM' : 'HIGH'}
     
 Difficulty Level: ${difficulty}
 Game Mode: ${gameMode}
@@ -3054,12 +3102,14 @@ ENSURE: Every question is completely unique and different from typical quiz ques
         };
       });
 
-      // Calculate totals
-      quizData.totalPoints = quizData.questions.reduce((sum, q) => sum + q.points, 0);
+      // Calculate totals      quizData.totalPoints = quizData.questions.reduce((sum, q) => sum + q.points, 0);
       quizData.averageTime = Math.round(quizData.questions.reduce((sum, q) => sum + q.timeLimit, 0) / quizData.questions.length);
       quizData.gameMode = gameMode;
       
-      console.log(`✅ Successfully generated ${quizData.questions.length} questions`);
+      // Add questions to cache to prevent future repetition
+      addQuestionsToCache(subject, difficulty, gameMode, quizData.questions);
+      
+      console.log(`✅ Successfully generated ${quizData.questions.length} questions and cached for uniqueness`);
         } catch (parseError) {
       console.error('🚨 CRITICAL: AI Response Parsing Failed!');
       console.error('📝 Parse Error:', parseError.message);
@@ -3077,13 +3127,15 @@ ENSURE: Every question is completely unique and different from typical quiz ques
       
       // Fallback: Generate basic questions if AI parsing fails
       console.log('🔄 Generating fallback questions...');
-      
-      quizData = {
+        quizData = {
         questions: generateFallbackQuestions(subject, questionCount, difficulty, gameMode),
         gameMode: gameMode,
         totalPoints: questionCount * (difficulty === 'easy' ? 10 : difficulty === 'medium' ? 15 : 20),
         averageTime: gameMode === 'speed' ? 10 : 30
       };
+      
+      // Add fallback questions to cache as well
+      addQuestionsToCache(subject, difficulty, gameMode, quizData.questions);
     }
 
     res.json({
@@ -4338,8 +4390,10 @@ async function createGameRoom(socket1, player2) {
 }
 
 async function generateMultiplayerQuestions(category, difficulty) {
-  // Use existing quiz generation logic
+  // Use existing quiz generation logic with uniqueness
   try {
+    // Add timestamp and random seed for uniqueness
+    const uniqueSeed = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const response = await fetch(`http://localhost:${PORT}/api/ai/generate-quiz-arena`, {
       method: 'POST',
       headers: {
@@ -4349,13 +4403,25 @@ async function generateMultiplayerQuestions(category, difficulty) {
         subject: category,
         difficulty: difficulty,
         questionCount: 5,
-        gameMode: 'multiplayer'
+        gameMode: 'multiplayer',
+        uniqueSeed: uniqueSeed,
+        topics: [], // Force different topics each time
+        previousQuestions: [] // We'll track these globally later
       })
     });
 
     if (response.ok) {
       const data = await response.json();
-      return data.quiz?.questions || data.questions || [];
+      const questions = data.quiz?.questions || data.questions || [];
+      
+      // Ensure each question has unique ID and properties for multiplayer
+      return questions.map((q, index) => ({
+        ...q,
+        id: `mp_${uniqueSeed}_q${index}`,
+        gameMode: 'multiplayer',
+        timeLimit: q.timeLimit || 30,
+        points: q.points || (difficulty === 'easy' ? 10 : difficulty === 'medium' ? 15 : 20)
+      }));
     }
   } catch (error) {
     console.error('Error generating multiplayer questions:', error);
