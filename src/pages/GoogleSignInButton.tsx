@@ -16,6 +16,11 @@ const GoogleSignInButton = () => {
       onError={() => {
         console.error("Google Sign-In failed");
       }}
+      useOneTap={false}
+      auto_select={false}
+      cancel_on_tap_outside={true}
+      context="signin"
+      size="large"
     />
   );
 };

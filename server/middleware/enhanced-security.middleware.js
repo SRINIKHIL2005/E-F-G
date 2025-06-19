@@ -57,20 +57,20 @@ export const enhancedSecurityMiddleware = {
       }
     })
   },
-
-  // Enhanced security headers
+  // Enhanced security headers with Google OAuth support
   securityHeaders: helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://accounts.google.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
-        imgSrc: ["'self'", "data:", "https:", "blob:"],
-        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:", "blob:", "https://lh3.googleusercontent.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com", "https://accounts.google.com"],
+        connectSrc: ["'self'", "https://accounts.google.com", "https://oauth2.googleapis.com", "https://www.googleapis.com"],
+        frameSrc: ["'self'", "https://accounts.google.com"],
         objectSrc: ["'none'"],
-        frameSrc: ["'none'"],
         baseUri: ["'self'"],
-        formAction: ["'self'"],
+        formAction: ["'self'", "https://accounts.google.com"],
         upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
       }
     },
@@ -83,8 +83,8 @@ export const enhancedSecurityMiddleware = {
     xssFilter: true,
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     permittedCrossDomainPolicies: false,
-    crossOriginEmbedderPolicy: true,
-    crossOriginOpenerPolicy: { policy: 'same-origin' },
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false, // Disable COOP to allow OAuth popups
     crossOriginResourcePolicy: { policy: 'cross-origin' }
   }),
 
