@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
+import GoogleOAuthCallback from "./pages/GoogleOAuthCallback";
 import ThankYou from "./pages/ThankYou";
 import SecurityCenter from "./pages/security/SecurityCenter";
 import AdminSecurityDashboard from "./pages/admin/AdminSecurityDashboard";
@@ -60,6 +61,7 @@ const App = () => {
                   {/* Public routes */}
                   <Route path="/" element={<Index />} />
                   <Route path="/login" element={<Login />} />
+                  <Route path="/auth/google/callback" element={<GoogleOAuthCallback />} />
                   <Route path="/thank-you" element={<ThankYou />} />
                   <Route path="/Results" element={<Results />} />
                 
