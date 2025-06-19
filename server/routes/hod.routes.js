@@ -1633,28 +1633,23 @@ router.get('/dashboard-summary', authenticateJWT, async (req, res) => {
     console.log(`   Students: role='student'${isDev ? '' : `, department='${department}'`}`);
     console.log(`   Teachers: role='teacher'${isDev ? '' : `, department='${department}'`}`);
     console.log(`   Courses: ${isDev ? 'all courses' : `department='${department}'`}`);
-    
-    // Get actual sample data to verify what's in the database
-    const sampleStudents = await User.find({ role: 'student' }).limit(5).select('name email department');
-    const sampleTeachers = await User.find({ role: 'teacher' }).limit(5).select('name email department');
+      // Get actual sample data to verify what's in the database
+    const sampleStudents = await User.find({ role: 'student' }).select('name email department');
+    const sampleTeachers = await User.find({ role: 'teacher' }).select('name email department');
     console.log('👨‍🎓 Sample students:', sampleStudents.map(s => `${s.name} (${s.department})`));
     console.log('👨‍🏫 Sample teachers:', sampleTeachers.map(t => `${t.name} (${t.department})`));
-    
-    // Get all students 
+      // Get all students 
     const recentStudents = await User.find(studentQuery)
       .sort({ createdAt: -1 })
-      .limit(10)  // Increased limit to see more data
       .select('-password');
         // Get all faculty
     const recentFaculty = await User.find(teacherQuery)
       .sort({ createdAt: -1 })
-      .limit(10)  // Increased limit to see more data
       .select('-password');
     
     // Get all courses  
     const recentCourses = await Course.find(courseQuery)
       .sort({ createdAt: -1 })
-      .limit(10)  // Increased limit to see more data
       .populate('teacher', 'name email');
         console.log(`📝 Prepared data: ${recentStudents.length} students, ${recentFaculty.length} faculty, ${recentCourses.length} courses`);
     
@@ -1698,10 +1693,9 @@ router.get('/debug-dashboard', async (req, res) => {
     const totalTeachers = await User.countDocuments({ role: 'teacher' });
     
     console.log(`🐞 SIMPLE COUNT: ${totalStudents} students, ${totalTeachers} teachers`);
-    
-    // Get sample data
-    const sampleStudents = await User.find({ role: 'student' }).limit(5).select('name email department');
-    const sampleTeachers = await User.find({ role: 'teacher' }).limit(5).select('name email department');
+      // Get sample data
+    const sampleStudents = await User.find({ role: 'student' }).select('name email department');
+    const sampleTeachers = await User.find({ role: 'teacher' }).select('name email department');
     
     console.log('🐞 Sample students:', sampleStudents.map(s => `${s.name} (${s.department})`));
     console.log('🐞 Sample teachers:', sampleTeachers.map(t => `${t.name} (${t.department})`));
