@@ -2613,13 +2613,10 @@ app.post('/api/user/quiz-completion', authenticateJWT, async (req, res) => {
 // Get leaderboard
 app.get('/api/quiz/leaderboard', authenticateJWT, async (req, res) => {
   try {
-    const { category = 'all', timeframe = 'all' } = req.query;
-
-    // Get users with quiz stats
+    const { category = 'all', timeframe = 'all' } = req.query;    // Get users with quiz stats
     const users = await User.find({ 'quizStats.totalQuizzes': { $gt: 0 } })
       .select('name quizStats')
-      .sort({ 'quizStats.xp': -1 })
-      .limit(100);
+      .sort({ 'quizStats.xp': -1 });
 
     const leaderboard = users.map((user, index) => ({
       rank: index + 1,
@@ -4126,10 +4123,8 @@ app.get('/api/attendance/summary', authenticateJWT, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden', message: 'Only HOD can access attendance summary' });
     }
 
-    const hodData = await User.findById(req.user.id);
-    const attendanceRecords = await Attendance.find({ department: hodData.department })
-      .sort({ date: -1 })
-      .limit(100); // Limit to recent records for performance
+    const hodData = await User.findById(req.user.id);    const attendanceRecords = await Attendance.find({ department: hodData.department })
+      .sort({ date: -1 });
 
     res.json(attendanceRecords);
   } catch (error) {

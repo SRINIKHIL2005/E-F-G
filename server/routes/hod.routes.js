@@ -409,12 +409,10 @@ router.get('/recent-activities', authenticateJWT, async (req, res) => {
     
     // Gather recent activities from multiple collections
     const recentActivities = [];
-    
-    // Recent user registrations
+      // Recent user registrations
     const recentUsers = await User.find({ department })
       .select('name role createdAt')
-      .sort({ createdAt: -1 })
-      .limit(5);
+      .sort({ createdAt: -1 });
       recentUsers.forEach(user => {
       recentActivities.push({
         _id: user._id.toString(),
@@ -436,10 +434,8 @@ router.get('/recent-activities', authenticateJWT, async (req, res) => {
         })
         .populate({
           path: 'studentId',
-          select: 'name'
-        })
-        .sort({ submittedAt: -1 })
-        .limit(5);
+          select: 'name'        })
+        .sort({ submittedAt: -1 });
         recentFeedbacks.forEach(feedback => {
         if (feedback.formId) { // Only include if the form belongs to this department
           recentActivities.push({
@@ -461,10 +457,8 @@ router.get('/recent-activities', authenticateJWT, async (req, res) => {
       const recentCourses = await Course.find({ department })
         .populate({
           path: 'teacher',
-          select: 'name'
-        })
-        .sort({ createdAt: -1 })
-        .limit(5);
+          select: 'name'        })
+        .sort({ createdAt: -1 });
         recentCourses.forEach(course => {
         recentActivities.push({
           _id: course._id.toString(),
@@ -484,10 +478,8 @@ router.get('/recent-activities', authenticateJWT, async (req, res) => {
       const recentAttendance = await Attendance.find({ department })
         .populate({
           path: 'createdBy',
-          select: 'name'
-        })
-        .sort({ createdAt: -1 })
-        .limit(3);
+          select: 'name'        })
+        .sort({ createdAt: -1 });
         recentAttendance.forEach(record => {
         recentActivities.push({
           _id: record._id.toString(),
