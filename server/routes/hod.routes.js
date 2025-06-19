@@ -627,11 +627,38 @@ router.get('/students', authenticateJWT, async (req, res) => {
         attendanceRate,
         lastLogin: student.lastLogin,
         createdAt: student.createdAt
-      };
-    }));
-      console.log(`✅ Returning ${enrichedStudents.length} students`);
-    // Return an array directly to ensure frontend receives all items correctly
-    res.json(enrichedStudents);
+      };    }));
+    
+    // Group students by department for HOD view
+    const studentsByDepartment = {};
+    enrichedStudents.forEach(student => {
+      const dept = student.department || 'Unassigned';
+      if (!studentsByDepartment[dept]) {
+        studentsByDepartment[dept] = [];
+      }
+      studentsByDepartment[dept].push(student);
+    });
+      
+    console.log(`✅ Returning ${enrichedStudents.length} students grouped by ${Object.keys(studentsByDepartment).length} departments`);
+    console.log(`🏫 Departments with students:`, Object.keys(studentsByDepartment));
+    
+    // Return both the full list and department breakdown
+    res.json({
+      students: enrichedStudents,
+      departmentBreakdown: studentsByDepartment,
+      summary: {
+        totalStudents: enrichedStudents.length,
+        departmentCount: Object.keys(studentsByDepartment).length,
+        departments: Object.keys(studentsByDepartment).map(dept => ({
+          name: dept,
+          studentCount: studentsByDepartment[dept].length,
+          averageAttendance: Math.round(
+            studentsByDepartment[dept].reduce((sum, student) => sum + student.attendanceRate, 0) / 
+            studentsByDepartment[dept].length
+          ) || 0
+        }))
+      }
+    });
   } catch (error) {
     console.error('❌ Error fetching students:', error);
     res.status(500).json({ error: 'Failed to fetch students', message: error.message });
@@ -799,15 +826,11 @@ router.get('/courses', authenticateJWT, async (req, res) => {
     const allCourses = await Course.find().select('name code department');
     console.log(`📝 DEBUG: Found ${allCourses.length} total courses in the database`);
     console.log(JSON.stringify(allCourses));
-    
-    // Build query - more flexible for development
-    // In development mode, we'll get all courses
+      // Build query - HOD should see ALL courses regardless of environment or department
     const query = {};
     
-    // In production, add department filter
-    if (process.env.NODE_ENV === 'production') {
-      query.department = department;
-    }
+    // HOD should see all courses across all departments for management purposes
+    // Removed production environment filtering to ensure HOD can manage entire institution
     
     if (req.query.search) {
       const searchRegex = new RegExp(req.query.search, 'i');
@@ -819,14 +842,13 @@ router.get('/courses', authenticateJWT, async (req, res) => {
     }
     
     console.log('🔍 Query for courses:', query);
-    
-    const courses = await Course.find(query)
-      .populate('teacher', 'name email')
+      const courses = await Course.find(query)
+      .populate('teacher', 'name email department')
+      .populate('students', 'name email department')
       .sort({ createdAt: -1 });
       
     console.log(`📊 Query returned ${courses.length} courses`);
-    
-    // Enrich with additional data
+      // Enrich with additional data and group by department
     const enrichedCourses = courses.map(course => {
       return {
         _id: course._id,
@@ -842,9 +864,34 @@ router.get('/courses', authenticateJWT, async (req, res) => {
         enrollment: course.students?.length || 0
       };
     });
-      console.log(`✅ Returning ${enrichedCourses.length} courses`);
-    // Return an array directly to ensure frontend receives all items correctly
-    res.json(enrichedCourses);
+    
+    // Group courses by department for HOD view
+    const coursesByDepartment = {};
+    enrichedCourses.forEach(course => {
+      const dept = course.department || 'Unassigned';
+      if (!coursesByDepartment[dept]) {
+        coursesByDepartment[dept] = [];
+      }
+      coursesByDepartment[dept].push(course);
+    });
+      
+    console.log(`✅ Returning ${enrichedCourses.length} courses grouped by ${Object.keys(coursesByDepartment).length} departments`);
+    console.log(`🏫 Departments with courses:`, Object.keys(coursesByDepartment));
+    
+    // Return both the full list and department breakdown
+    res.json({
+      courses: enrichedCourses,
+      departmentBreakdown: coursesByDepartment,
+      summary: {
+        totalCourses: enrichedCourses.length,
+        departmentCount: Object.keys(coursesByDepartment).length,
+        departments: Object.keys(coursesByDepartment).map(dept => ({
+          name: dept,
+          courseCount: coursesByDepartment[dept].length,
+          totalEnrollment: coursesByDepartment[dept].reduce((sum, course) => sum + course.enrollment, 0)
+        }))
+      }
+    });
   } catch (error) {
     console.error('❌ Error fetching courses:', error);
     res.status(500).json({ error: 'Failed to fetch courses', message: error.message });
@@ -1328,11 +1375,36 @@ router.get('/faculty', authenticateJWT, async (req, res) => {
         studentsCount,
         lastLogin: teacher.lastLogin,
         createdAt: teacher.createdAt
-      };
-    }));
-      console.log(`✅ Returning ${enrichedFaculty.length} faculty members`);
-    // Return an array directly to ensure frontend receives all items correctly
-    res.json(enrichedFaculty);
+      };    }));
+    
+    // Group faculty by department for HOD view
+    const facultyByDepartment = {};
+    enrichedFaculty.forEach(faculty => {
+      const dept = faculty.department || 'Unassigned';
+      if (!facultyByDepartment[dept]) {
+        facultyByDepartment[dept] = [];
+      }
+      facultyByDepartment[dept].push(faculty);
+    });
+      
+    console.log(`✅ Returning ${enrichedFaculty.length} faculty members grouped by ${Object.keys(facultyByDepartment).length} departments`);
+    console.log(`🏫 Departments with faculty:`, Object.keys(facultyByDepartment));
+    
+    // Return both the full list and department breakdown
+    res.json({
+      faculty: enrichedFaculty,
+      departmentBreakdown: facultyByDepartment,
+      summary: {
+        totalFaculty: enrichedFaculty.length,
+        departmentCount: Object.keys(facultyByDepartment).length,
+        departments: Object.keys(facultyByDepartment).map(dept => ({
+          name: dept,
+          facultyCount: facultyByDepartment[dept].length,
+          totalCourses: facultyByDepartment[dept].reduce((sum, faculty) => sum + faculty.coursesCount, 0),
+          totalStudents: facultyByDepartment[dept].reduce((sum, faculty) => sum + faculty.studentsCount, 0)
+        }))
+      }
+    });
   } catch (error) {
     console.error('❌ Error fetching faculty:', error);
     res.status(500).json({ error: 'Failed to fetch faculty', message: error.message });
@@ -1614,41 +1686,96 @@ router.get('/dashboard-summary', authenticateJWT, async (req, res) => {
     const sampleStudents = await User.find({ role: 'student' }).select('name email department');
     const sampleTeachers = await User.find({ role: 'teacher' }).select('name email department');
     console.log('👨‍🎓 Sample students:', sampleStudents.map(s => `${s.name} (${s.department})`));
-    console.log('👨‍🏫 Sample teachers:', sampleTeachers.map(t => `${t.name} (${t.department})`));
-      // Get all students 
+    console.log('👨‍🏫 Sample teachers:', sampleTeachers.map(t => `${t.name} (${t.department})`));    // Get all students with department grouping
     const recentStudents = await User.find(studentQuery)
       .sort({ createdAt: -1 })
       .select('-password');
-        // Get all faculty
+        
+    // Get all faculty with department grouping
     const recentFaculty = await User.find(teacherQuery)
       .sort({ createdAt: -1 })
       .select('-password');
     
-    // Get all courses  
+    // Get all courses with proper population
     const recentCourses = await Course.find(courseQuery)
       .sort({ createdAt: -1 })
-      .populate('teacher', 'name email');
-        console.log(`📝 Prepared data: ${recentStudents.length} students, ${recentFaculty.length} faculty, ${recentCourses.length} courses`);
+      .populate('teacher', 'name email department')
+      .populate('students', 'name email');
     
-    // Build and send response
+    // Group students by department for better organization
+    const studentsByDepartment = {};
+    recentStudents.forEach(student => {
+      const dept = student.department || 'Unassigned';
+      if (!studentsByDepartment[dept]) {
+        studentsByDepartment[dept] = [];
+      }
+      studentsByDepartment[dept].push(student);
+    });
+    
+    // Group faculty by department for better organization  
+    const facultyByDepartment = {};
+    recentFaculty.forEach(faculty => {
+      const dept = faculty.department || 'Unassigned';
+      if (!facultyByDepartment[dept]) {
+        facultyByDepartment[dept] = [];
+      }
+      facultyByDepartment[dept].push(faculty);
+    });
+    
+    // Group courses by department
+    const coursesByDepartment = {};
+    recentCourses.forEach(course => {
+      const dept = course.department || 'Unassigned';
+      if (!coursesByDepartment[dept]) {
+        coursesByDepartment[dept] = [];
+      }
+      coursesByDepartment[dept].push(course);
+    });
+    
+    // Calculate department statistics
+    const departmentStats = {};
+    const allDepartments = [...new Set([
+      ...Object.keys(studentsByDepartment),
+      ...Object.keys(facultyByDepartment),
+      ...Object.keys(coursesByDepartment)
+    ])];
+    
+    allDepartments.forEach(dept => {
+      departmentStats[dept] = {
+        students: studentsByDepartment[dept]?.length || 0,
+        faculty: facultyByDepartment[dept]?.length || 0,
+        courses: coursesByDepartment[dept]?.length || 0
+      };
+    });
+        
+    console.log(`📝 Prepared data: ${recentStudents.length} students, ${recentFaculty.length} faculty, ${recentCourses.length} courses`);
+    console.log(`🏫 Department breakdown:`, JSON.stringify(departmentStats, null, 2));
+      // Build and send response with department segregation
     const dashboardData = {
       summary: {
         totalStudents,
         totalFaculty: totalTeachers,
         totalCourses,
-        totalFeedbacks: totalFeedbackForms, // Changed to count feedback forms instead of responses
-        totalFeedbackResponses: totalFeedbacks, // Add separate field for responses
-        courseGrowth: 10, // Default value
-        facultyGrowth: 5,  // Default value
-        studentGrowth: 15, // Default value
-        feedbackGrowth: 20, // Default value
-        attendanceRate: 85, // Default value
-        feedbackResponseRate: 75, // Default value
+        totalFeedbacks: totalFeedbackForms,
+        totalFeedbackResponses: totalFeedbacks,
+        courseGrowth: 10,
+        facultyGrowth: 5,
+        studentGrowth: 15,
+        feedbackGrowth: 20,
+        attendanceRate: 85,
+        feedbackResponseRate: 75,
         activeUsers: totalStudents + totalTeachers
       },
       students: recentStudents || [],
       faculty: recentFaculty || [],
       courses: recentCourses || [],
+      // Add department-wise segregation
+      departmentBreakdown: {
+        students: studentsByDepartment,
+        faculty: facultyByDepartment,
+        courses: coursesByDepartment,
+        statistics: departmentStats
+      },
       recentActivity: []
     };
     
