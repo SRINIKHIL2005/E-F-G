@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HOD Dashboard API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #ffe6e6; color: #d00; }
+        .success { background: #e6ffe6; color: #080; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>HOD Dashboard API Test</h1>
+    
+    <button onclick="testAPI()">Test Debug Dashboard API</button>
+    <button onclick="testAuthAPI()">Test Authenticated API</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE = '';
+        
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            results.appendChild(div);
+        }
+        
+        async function testAPI() {
+            try {
+                log('Testing debug dashboard endpoint...');
+                const response = await fetch(`${API_BASE}/api/hod/debug-dashboard`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                log(`✅ Success! Students: ${data.summary.totalStudents}, Teachers: ${data.summary.totalFaculty}, Courses: ${data.summary.totalCourses}`, 'success');
+                log(`Full response: <pre>${JSON.stringify(data, null, 2)}</pre>`, 'success');
+                
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+                console.error('API Test Error:', error);
+            }
+        }
+        
+        async function testAuthAPI() {
+            try {
+                log('Testing authenticated dashboard endpoint...');
+                const response = await fetch(`${API_BASE}/api/hod/dashboard-summary`, {
+                    headers: {
+                        'Authorization': 'Bearer dummy-token',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    log(`❌ Auth API failed: ${response.status} - ${JSON.stringify(data)}`, 'error');
+                } else {
+                    log(`✅ Auth Success! Students: ${data.summary.totalStudents}, Teachers: ${data.summary.totalFaculty}`, 'success');
+                }
+                
+            } catch (error) {
+                log(`❌ Auth Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Test on page load
+        window.onload = () => {
+            log('Page loaded. Click buttons to test API endpoints.');
+        };
+    </script>
+</body>
+</html>

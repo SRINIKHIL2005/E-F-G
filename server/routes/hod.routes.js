@@ -1731,14 +1731,13 @@ router.get('/debug-dashboard', async (req, res) => {
       await User.countDocuments({ role: 'student', department });
       
     const totalTeachers = isDev ? 
-      await User.countDocuments({ role: 'teacher' }) : 
-      await User.countDocuments({ role: 'teacher', department });
-      // Debug: Check both with and without department filtering
+      await User.countDocuments({ role: 'teacher' }) :      await User.countDocuments({ role: 'teacher', department });
+      
+    // Debug: Check both with and without department filtering
     const totalFeedbackFormsAll = await FeedbackForm.countDocuments({}).catch(() => 0);
     const totalFeedbackFormsDept = await FeedbackForm.countDocuments({ department }).catch(() => 0);
     
-    // In development, show all feedback forms if none found for specific department
-    const isDev = process.env.NODE_ENV !== 'production';
+    // Use the same isDev variable declared earlier
     const totalFeedbackForms = (isDev && totalFeedbackFormsDept === 0) ? totalFeedbackFormsAll : totalFeedbackFormsDept;
     
     const totalFeedbacks = await FeedbackResponse.countDocuments().catch(() => 0);
