@@ -302,6 +302,41 @@ const userSchema = new mongoose.Schema({
       type: Number,
       default: 0
     },
+    // Question history to prevent repetition
+    questionHistory: [{
+      questionId: String,
+      questionHash: String, // Hash of question content for uniqueness
+      category: String,
+      difficulty: String,
+      gameMode: String,
+      wasCorrect: Boolean,
+      attempts: Number,
+      lastSeen: { type: Date, default: Date.now },
+      masteryLevel: { 
+        type: Number, 
+        default: 0, // 0-100, higher means user has mastered this question type
+        min: 0,
+        max: 100
+      }
+    }],
+    // Difficulty progression system
+    difficultyLevels: {
+      javascript: { type: Number, default: 1, min: 1, max: 10 },
+      react: { type: Number, default: 1, min: 1, max: 10 },
+      algorithms: { type: Number, default: 1, min: 1, max: 10 },
+      databases: { type: Number, default: 1, min: 1, max: 10 },
+      security: { type: Number, default: 1, min: 1, max: 10 },
+      ai: { type: Number, default: 1, min: 1, max: 10 },
+      general: { type: Number, default: 1, min: 1, max: 10 }
+    },
+    // Performance analytics
+    performanceStats: {
+      accuracyRate: { type: Number, default: 0 }, // Overall accuracy %
+      averageTime: { type: Number, default: 30 }, // Average time per question
+      strongestCategories: [String], // Categories user performs best in
+      weakestCategories: [String], // Categories needing improvement
+      lastAnalyzed: { type: Date, default: Date.now }
+    },
     achievements: [{
       achievementId: String,
       unlockedAt: Date,
@@ -314,6 +349,9 @@ const userSchema = new mongoose.Schema({
       score: Number,
       questionsAnswered: Number,
       correctAnswers: Number,
+      timeTaken: Number, // Total time in seconds
+      averageTimePerQuestion: Number,
+      accuracyRate: Number,
       playedAt: { type: Date, default: Date.now }
     }]
   }

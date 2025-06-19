@@ -95,7 +95,7 @@ interface LeaderboardEntry {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 const AIQuizArena: React.FC = () => {
-  const { user, token } = useAuth();
+  const { user, token } = useAuth();  // Quiz state management  
   const [gameMode, setGameMode] = useState<'menu' | 'playing' | 'results'>('menu');
   const [currentSession, setCurrentSession] = useState<QuizSession | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -106,6 +106,18 @@ const AIQuizArena: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showDocumentUploader, setShowDocumentUploader] = useState(false);
   const [selectedGameMode, setSelectedGameMode] = useState<string>('classic');
+  
+  // Store question details for tracking and anti-repetition
+  const [questionAnswers, setQuestionAnswers] = useState<Array<{
+    questionId: string;
+    question: string;
+    category: string;
+    difficulty: string;
+    wasCorrect: boolean;
+    userAnswer: number;
+    correctAnswer: number;
+  }>>([]);
+  
   const [activePowerUps, setActivePowerUps] = useState<{
     doublePoints: boolean;
     fiftyFifty: boolean;
@@ -469,10 +481,31 @@ const AIQuizArena: React.FC = () => {
         bestStreak: 0
       });
     }
-  };
-
-  const startQuiz = async (category: string, mode: string) => {
+  };  const startQuiz = async (category: string, mode: string) => {
     try {
+      // Show loading state
+      toast.loading('🎯 Generating adaptive questions...', { id: 'quiz-loading' });
+      
+      // Get user's question history for better repetition avoidance
+      let userQuestionHistory = [];
+      try {
+        const historyResponse = await fetch(`${API_BASE_URL}/api/user/question-history`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (historyResponse.ok) {
+          const historyData = await historyResponse.json();
+          userQuestionHistory = historyData.questionHashes || [];
+          console.log(`📚 Retrieved ${userQuestionHistory.length} previous questions for ${user?.name}`);
+        }
+      } catch (historyError) {
+        console.warn('Could not fetch question history:', historyError);
+      }
+      
       const response = await fetch(`${API_BASE_URL}/api/ai/generate-quiz-arena`, {
         method: 'POST',
         headers: {
@@ -481,10 +514,16 @@ const AIQuizArena: React.FC = () => {
         },        body: JSON.stringify({
           subject: category,
           gameMode: mode,
-          difficulty: 'medium',
-          questionCount: mode === 'speed' ? 20 : mode === 'survival' ? 100 : 10
+          difficulty: 'adaptive', // Use adaptive difficulty based on user level
+          questionCount: mode === 'speed' ? 20 : mode === 'survival' ? 100 : 10,
+          previousQuestions: userQuestionHistory, // Pass user's question history
+          useAdaptiveDifficulty: true, // Enable adaptive difficulty
+          uniqueSeed: `${user?.id}_${Date.now()}_${Math.random()}` // Unique seed for each user session
         }),
       });
+
+      // Dismiss loading toast
+      toast.dismiss('quiz-loading');
 
       if (!response.ok) {
         const errorData = await response.text();
@@ -517,6 +556,9 @@ const AIQuizArena: React.FC = () => {
       setSelectedAnswer(null);
       setShowExplanation(false);
       
+      // Reset tracking for new quiz
+      setQuestionAnswers([]);
+      
       // Reset active power-ups for new quiz
       setActivePowerUps({
         doublePoints: false,
@@ -526,12 +568,16 @@ const AIQuizArena: React.FC = () => {
       
       if (soundEnabled) {
         playSound('game-start');
-      }} catch (error) {
+      }
+      
+      const adaptiveInfo = quizData.quiz?.adaptiveDifficulty || 'medium';
+      toast.success(`🎯 Generated ${questions.length} ${adaptiveInfo} questions for ${mode} mode!`);
+    } catch (error) {
       console.error('Quiz generation error:', error);
+      toast.dismiss('quiz-loading');
       toast.error('Failed to generate quiz. Please try again or upload a document.');
       return; // Don't create a session with mock data
     }  };
-
   const handleQuizFromFiles = (quiz: any) => {
     if (!quiz || !quiz.questions || quiz.questions.length === 0) {
       toast.error('No valid questions generated from files');
@@ -558,6 +604,16 @@ const AIQuizArena: React.FC = () => {
     setShowExplanation(false);
     setShowDocumentUploader(false);
     
+    // Reset tracking for new quiz
+    setQuestionAnswers([]);
+    
+    // Reset power-ups
+    setActivePowerUps({
+      doublePoints: false,
+      fiftyFifty: false,
+      usedFiftyFiftyQuestions: new Set()
+    });
+    
     if (soundEnabled) {
       playSound('game-start');
     }
@@ -568,8 +624,7 @@ const AIQuizArena: React.FC = () => {
   const openDocumentUploader = (mode: string) => {
     setSelectedGameMode(mode);
     setShowDocumentUploader(true);
-  };
-  const handleAnswerSelect = (answerIndex: number) => {
+  };  const handleAnswerSelect = (answerIndex: number) => {
     if (selectedAnswer !== null || !currentSession) return;
     
     // Route to multiplayer handler if in multiplayer mode
@@ -582,9 +637,24 @@ const AIQuizArena: React.FC = () => {
     const question = currentSession.questions[currentSession.currentQuestionIndex];
     const isCorrect = answerIndex === question.correctAnswer;
     
+    // Record the question answer for tracking
+    const questionAnswer = {
+      questionId: question.id,
+      question: question.question,
+      category: question.category || currentSession.category,
+      difficulty: question.difficulty || 'medium',
+      wasCorrect: isCorrect,
+      userAnswer: answerIndex,
+      correctAnswer: question.correctAnswer
+    };
+    
+    setQuestionAnswers(prev => [...prev, questionAnswer]);
+    
     if (soundEnabled) {
       playSound(isCorrect ? 'correct' : 'wrong');
-    }if (isCorrect) {
+    }
+
+    if (isCorrect) {
       let points = question.points;
       
       // Apply double points power-up
@@ -636,13 +706,15 @@ const AIQuizArena: React.FC = () => {
       }
     }
 
+    // Show explanation immediately for better learning experience
     setTimeout(() => {
       setShowExplanation(true);
-    }, 1000);
+    }, 500);
 
+    // Proceed to next question after showing explanation
     setTimeout(() => {
       nextQuestion();
-    }, 3000);
+    }, 4000); // Increased time to allow better explanation reading
   };
 
   const nextQuestion = () => {
@@ -663,9 +735,23 @@ const AIQuizArena: React.FC = () => {
     setSelectedAnswer(null);
     setShowExplanation(false);
     setTimeLeft(currentSession.questions[nextIndex].timeLimit);
-  };
-  const handleTimeout = () => {
+  };  const handleTimeout = () => {
     if (!currentSession) return;
+    
+    const question = currentSession.questions[currentSession.currentQuestionIndex];
+    
+    // Record timeout as incorrect answer for tracking
+    const questionAnswer = {
+      questionId: question.id,
+      question: question.question,
+      category: question.category || currentSession.category,
+      difficulty: question.difficulty || 'medium',
+      wasCorrect: false,
+      userAnswer: -1, // Indicate timeout
+      correctAnswer: question.correctAnswer
+    };
+    
+    setQuestionAnswers(prev => [...prev, questionAnswer]);
     
     if (currentSession.mode === 'survival') {
       const newLives = Math.max(0, currentSession.lives - 1);
@@ -683,12 +769,22 @@ const AIQuizArena: React.FC = () => {
         return;
       }
     } else {
+      setCurrentSession(prev => prev ? {
+        ...prev,
+        streak: 0
+      } : null);
+      
       toast.error('Time\'s up!');
     }
 
+    // Show explanation briefly even on timeout
+    setTimeout(() => {
+      setShowExplanation(true);
+    }, 500);
+
     setTimeout(() => {
       nextQuestion();
-    }, 2000);
+    }, 2500);
   };
   const updateUserCoins = async (newCoinBalance: number) => {
     try {
@@ -799,9 +895,14 @@ const AIQuizArena: React.FC = () => {
       console.error('Error using power-up:', error);
     }
   };
+
   const recordQuizCompletion = async (session: QuizSession) => {
     try {
       const timeTaken = Math.round((Date.now() - session.startTime.getTime()) / 1000); // in seconds
+      
+      // Calculate actual correct answers based on tracked data
+      const actualCorrectAnswers = questionAnswers.filter(qa => qa.wasCorrect).length;
+      
       const response = await fetch(`${API_BASE_URL}/api/user/quiz-completion`, {
         method: 'POST',
         headers: {
@@ -813,9 +914,11 @@ const AIQuizArena: React.FC = () => {
           category: session.category,
           score: session.score,
           questionsAnswered: session.currentQuestionIndex + 1,
-          correctAnswers: Math.floor(session.score / 10), // Estimate based on 10 points per correct answer
+          correctAnswers: actualCorrectAnswers,
           timeTaken,
-          streak: session.streak
+          streak: session.streak,
+          questions: questionAnswers, // Send detailed question data for history tracking
+          averageTimePerQuestion: Math.round(timeTaken / (session.currentQuestionIndex + 1))
         }),
       });
       
@@ -850,13 +953,20 @@ const AIQuizArena: React.FC = () => {
     // Mock sound playing - in real app, implement actual sound system
     console.log(`Playing sound: ${type}`);
   };
-
   const resetQuiz = () => {
     setCurrentSession(null);
     setGameMode('menu');
     setSelectedAnswer(null);
     setShowExplanation(false);
     setTimeLeft(0);
+    setQuestionAnswers([]); // Clear question tracking
+    
+    // Reset power-ups
+    setActivePowerUps({
+      doublePoints: false,
+      fiftyFifty: false,
+      usedFiftyFiftyQuestions: new Set()
+    });
   };
 
   const getCurrentQuestion = () => {
@@ -904,8 +1014,7 @@ const AIQuizArena: React.FC = () => {
         toast.error('Failed to leave the room. Please try again.');
       }
     });
-  };
-  const handleStartMultiplayerQuiz = (category: string, mode: string) => {
+  };  const handleStartMultiplayerQuiz = (category: string, mode: string) => {
     if (!socket) return;
 
     socket.emit('start_quiz', { userId: user?.id, roomCode, category, mode }, (response: any) => {      if (response.success) {
@@ -930,6 +1039,9 @@ const AIQuizArena: React.FC = () => {
         setSelectedAnswer(null);
         setShowExplanation(false);
         
+        // Reset tracking for new quiz
+        setQuestionAnswers([]);
+        
         // Reset active power-ups for new quiz
         setActivePowerUps({
           doublePoints: false,
@@ -940,6 +1052,8 @@ const AIQuizArena: React.FC = () => {
         if (soundEnabled) {
           playSound('game-start');
         }
+        
+        toast.success(`🚀 Multiplayer ${mode} quiz started!`);
       } else {
         toast.error('Failed to start quiz. Please try again.');
       }
@@ -1394,7 +1508,7 @@ const AIQuizArena: React.FC = () => {
                   </div>
                   <CardTitle className="text-xl mt-4 text-foreground">{question.question}</CardTitle>
                 </CardHeader>
-              </Card>{/* Answer Options */}
+              </Card>              {/* Answer Options */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 {question.options.map((option, index) => {
                   const isSelected = selectedAnswer === index;
@@ -1415,16 +1529,23 @@ const AIQuizArena: React.FC = () => {
                       return null; // Hide this wrong option
                     }
                   }                  
-                  let buttonClass = 'bg-card hover:bg-muted border text-foreground';
+                  // Enhanced button color logic for better visual feedback
+                  let buttonClass = 'bg-card hover:bg-muted border text-foreground transition-all duration-300';
                   
                   if (showResult) {
                     if (isCorrect) {
-                      buttonClass = 'bg-green-500 hover:bg-green-600 border-green-400 text-white';
+                      // Always highlight correct answer in green
+                      buttonClass = 'bg-green-500 hover:bg-green-600 border-green-400 text-white font-semibold shadow-lg transform scale-105';
                     } else if (isSelected && !isCorrect) {
-                      buttonClass = 'bg-red-500 hover:bg-red-600 border-red-400 text-white';
+                      // Highlight user's wrong answer in red
+                      buttonClass = 'bg-red-500 hover:bg-red-600 border-red-400 text-white font-semibold shadow-lg';
                     } else {
-                      buttonClass = 'bg-muted/50 border text-muted-foreground';
+                      // Non-selected wrong answers in muted style
+                      buttonClass = 'bg-muted/50 border-muted text-muted-foreground opacity-60';
                     }
+                  } else if (isSelected) {
+                    // While answering, show selection feedback
+                    buttonClass = 'bg-blue-100 hover:bg-blue-200 border-blue-300 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200';
                   }
 
                   return (
@@ -1442,29 +1563,70 @@ const AIQuizArena: React.FC = () => {
                         <span className="font-bold mr-3">
                           {String.fromCharCode(65 + index)}.
                         </span>
-                        {option}
+                        <span className="text-left">{option}</span>
                       </Button>
                     </motion.div>
                   );
                 })}
-              </div>
-
-              {/* Explanation */}
+              </div>              {/* Explanation */}
               <AnimatePresence>
-                {showExplanation && (
+                {showExplanation && question.explanation && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                  >                    <Card className="bg-blue-50 dark:bg-blue-950/50 backdrop-blur border-blue-200 dark:border-blue-800">
+                    transition={{ duration: 0.5 }}
+                  >                    <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 backdrop-blur border-blue-200 dark:border-blue-800 shadow-lg">
                       <CardContent className="pt-6">
                         <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                            <Brain className="h-4 w-4 text-white" />
+                          <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-md">
+                            <Brain className="h-5 w-5 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold mb-3 text-foreground flex items-center">
+                              💡 Explanation
+                              {selectedAnswer === question.correctAnswer && (
+                                <span className="ml-2 text-green-600 dark:text-green-400">✅ Correct!</span>
+                              )}
+                              {selectedAnswer !== null && selectedAnswer !== question.correctAnswer && (
+                                <span className="ml-2 text-red-600 dark:text-red-400">❌ Incorrect</span>
+                              )}
+                            </h4>
+                            <p className="text-blue-700 dark:text-blue-200 leading-relaxed text-sm md:text-base">
+                              {question.explanation}
+                            </p>
+                            {question.difficulty && (
+                              <div className="mt-3 flex items-center space-x-2">
+                                <Badge variant="outline" className="text-xs">
+                                  {question.difficulty}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  {question.category || currentSession.category}
+                                </Badge>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                )}
+                {showExplanation && !question.explanation && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                  >
+                    <Card className="bg-yellow-50 dark:bg-yellow-950/50 backdrop-blur border-yellow-200 dark:border-yellow-800">
+                      <CardContent className="pt-6">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex-shrink-0 w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+                            <span className="text-white text-sm">!</span>
                           </div>
                           <div>
-                            <h4 className="font-semibold mb-2 text-foreground">Explanation</h4>
-                            <p className="text-blue-700 dark:text-blue-200">{question.explanation}</p>
+                            <p className="text-yellow-700 dark:text-yellow-200">
+                              No explanation available for this question.
+                            </p>
                           </div>
                         </div>
                       </CardContent>

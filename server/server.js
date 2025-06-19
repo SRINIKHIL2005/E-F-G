@@ -2586,7 +2586,7 @@ app.put('/api/user/learning-stats', authenticateJWT, async (req, res) => {
   }
 });
 
-// Record quiz completion
+// Record quiz completion with question tracking
 app.post('/api/user/quiz-completion', authenticateJWT, async (req, res) => {
   try {
     const { 
@@ -2596,7 +2596,9 @@ app.post('/api/user/quiz-completion', authenticateJWT, async (req, res) => {
       questionsAnswered, 
       correctAnswers, 
       timeTaken,
-      streak 
+      streak,
+      questions = [], // Array of questions with user answers
+      averageTimePerQuestion = 30
     } = req.body;
 
     const user = await User.findById(req.user.id);
@@ -2614,10 +2616,83 @@ app.post('/api/user/quiz-completion', authenticateJWT, async (req, res) => {
         correctAnswers: 0,
         currentStreak: 0,
         bestStreak: 0,
+        questionHistory: [],
+        difficultyLevels: {
+          javascript: 1, react: 1, algorithms: 1, databases: 1, security: 1, ai: 1, general: 1
+        },
+        performanceStats: {
+          accuracyRate: 0,
+          averageTime: 30,
+          strongestCategories: [],
+          weakestCategories: [],
+          lastAnalyzed: new Date()
+        },
         achievements: [],
         gameHistory: []
       };
     }
+
+    // Process each question for tracking
+    questions.forEach(q => {
+      const questionHash = `${q.question?.substring(0, 50)}_${q.category}_${q.difficulty}`;
+      const existingIndex = user.quizStats.questionHistory.findIndex(
+        qh => qh.questionId === q.id || qh.questionHash === questionHash
+      );
+
+      if (existingIndex !== -1) {
+        // Update existing question record
+        const existing = user.quizStats.questionHistory[existingIndex];
+        existing.attempts += 1;
+        existing.lastSeen = new Date();
+        
+        if (q.wasCorrect) {
+          existing.masteryLevel = Math.min(100, existing.masteryLevel + 10);
+        } else {
+          existing.masteryLevel = Math.max(0, existing.masteryLevel - 5);
+        }
+        existing.wasCorrect = q.wasCorrect; // Update with latest result
+      } else {
+        // Add new question record
+        user.quizStats.questionHistory.push({
+          questionId: q.id,
+          questionHash: questionHash,
+          category: q.category || category,
+          difficulty: q.difficulty || 'medium',
+          gameMode: gameMode,
+          wasCorrect: q.wasCorrect,
+          attempts: 1,
+          lastSeen: new Date(),
+          masteryLevel: q.wasCorrect ? 15 : 5
+        });
+      }
+    });
+
+    // Keep question history manageable (last 500 questions)
+    if (user.quizStats.questionHistory.length > 500) {
+      user.quizStats.questionHistory = user.quizStats.questionHistory
+        .sort((a, b) => b.lastSeen - a.lastSeen)
+        .slice(0, 500);
+    }
+
+    // Update difficulty levels based on performance
+    const categoryKey = category?.toLowerCase() || 'general';
+    if (user.quizStats.difficultyLevels[categoryKey] !== undefined) {
+      const accuracyRate = correctAnswers / questionsAnswered;
+      const currentLevel = user.quizStats.difficultyLevels[categoryKey];
+      
+      if (accuracyRate >= 0.8 && currentLevel < 10) {
+        user.quizStats.difficultyLevels[categoryKey] = Math.min(10, currentLevel + 1);
+      } else if (accuracyRate < 0.5 && currentLevel > 1) {
+        user.quizStats.difficultyLevels[categoryKey] = Math.max(1, currentLevel - 1);
+      }
+    }
+
+    // Update performance stats
+    const totalAccuracy = user.quizStats.correctAnswers + correctAnswers;
+    const totalQuestions = (user.quizStats.totalQuizzes + 1) * 10; // Estimate
+    user.quizStats.performanceStats.accuracyRate = Math.round((totalAccuracy / totalQuestions) * 100);
+    user.quizStats.performanceStats.averageTime = Math.round((user.quizStats.performanceStats.averageTime + averageTimePerQuestion) / 2);
+    user.quizStats.performanceStats.lastAnalyzed = new Date();
 
     // Update quiz stats
     user.quizStats.totalQuizzes += 1;
@@ -2633,13 +2708,16 @@ app.post('/api/user/quiz-completion', authenticateJWT, async (req, res) => {
       user.quizStats.bestStreak = streak;
     }
 
-    // Add to game history
+    // Add to game history with enhanced data
     user.quizStats.gameHistory.push({
       gameMode,
       category,
       score,
       questionsAnswered,
       correctAnswers,
+      timeTaken: timeTaken || 0,
+      averageTimePerQuestion,
+      accuracyRate: Math.round((correctAnswers / questionsAnswered) * 100),
       playedAt: new Date()
     });
 
@@ -2652,18 +2730,56 @@ app.post('/api/user/quiz-completion', authenticateJWT, async (req, res) => {
     const newAchievements = checkAchievements(user.quizStats);
     user.quizStats.achievements = [...user.quizStats.achievements, ...newAchievements];
 
-    await user.save();
+    // Level up system
+    const newLevel = Math.floor(user.quizStats.xp / 100) + 1;
+    if (newLevel > user.quizStats.level) {
+      user.quizStats.level = newLevel;
+      user.quizStats.coins += newLevel * 10; // Bonus coins for leveling up
+    }    await user.save();
 
     res.json({
       success: true,
       stats: user.quizStats,
-      newAchievements
+      newAchievements,
+      levelUp: newLevel > (user.quizStats.level - 1),
+      personalizedRecommendations: generatePersonalizedRecommendations(user.quizStats)
     });
   } catch (error) {
     console.error('Error recording quiz completion:', error);
     res.status(500).json({ error: 'Failed to record quiz completion' });
   }
 });
+
+// Generate personalized recommendations based on user performance
+function generatePersonalizedRecommendations(quizStats) {
+  const recommendations = [];
+  
+  // Analyze weak categories
+  const categoryPerformance = {};
+  quizStats.gameHistory.forEach(game => {
+    if (!categoryPerformance[game.category]) {
+      categoryPerformance[game.category] = { total: 0, correct: 0 };
+    }
+    categoryPerformance[game.category].total += game.questionsAnswered;
+    categoryPerformance[game.category].correct += game.correctAnswers;
+  });
+  
+  Object.keys(categoryPerformance).forEach(category => {
+    const perf = categoryPerformance[category];
+    const accuracy = (perf.correct / perf.total) * 100;
+    
+    if (accuracy < 70) {
+      recommendations.push({
+        type: 'improvement',
+        category,
+        message: `Focus on ${category} - current accuracy: ${Math.round(accuracy)}%`,
+        priority: 'high'
+      });
+    }
+  });
+  
+  return recommendations;
+}
 
 // Get leaderboard
 app.get('/api/quiz/leaderboard', authenticateJWT, async (req, res) => {
@@ -2738,34 +2854,46 @@ function generateFallbackQuestions(subject, count, difficulty, gameMode) {
   const questionTemplates = {
     javascript: [
       {
-        question: "What is the correct way to declare a variable in JavaScript?",
-        options: ["var myVar;", "variable myVar;", "v myVar;", "declare myVar;"],
-        correctAnswer: 0,
-        explanation: "The 'var' keyword is used to declare variables in JavaScript."
+        question: "What is the correct way to declare a variable in JavaScript ES6?",
+        options: ["var myVar;", "let myVar;", "variable myVar;", "declare myVar;"],
+        correctAnswer: 1,
+        explanation: "The 'let' keyword is the modern ES6 way to declare block-scoped variables, providing better scoping than 'var'."
       },
       {
         question: "Which method is used to add an element to the end of an array?",
         options: ["push()", "add()", "append()", "insert()"],
         correctAnswer: 0,
-        explanation: "The push() method adds one or more elements to the end of an array."
+        explanation: "The push() method adds one or more elements to the end of an array and returns the new length."
       },
       {
         question: "What does '===' mean in JavaScript?",
         options: ["Assignment", "Equality", "Strict equality", "Not equal"],
         correctAnswer: 2,
-        explanation: "The '===' operator checks for strict equality (value and type)."
+        explanation: "The '===' operator checks for strict equality, comparing both value and type without type coercion."
       },
       {
         question: "Which of these is NOT a JavaScript data type?",
         options: ["string", "number", "character", "boolean"],
         correctAnswer: 2,
-        explanation: "JavaScript doesn't have a 'character' data type. Individual characters are strings."
+        explanation: "JavaScript doesn't have a 'character' data type. Individual characters are strings of length 1."
       },
       {
-        question: "How do you create a function in JavaScript?",
-        options: ["function myFunc() {}", "def myFunc():", "func myFunc() {}", "function: myFunc() {}"],
+        question: "How do you create an arrow function in JavaScript?",
+        options: ["function() => {}", "() => {}", "=> function() {}", "arrow() {}"],
+        correctAnswer: 1,
+        explanation: "Arrow functions use the '=>' syntax and provide a more concise way to write functions in ES6."
+      },
+      {
+        question: "What will 'console.log(typeof null)' output?",
+        options: ["'null'", "'undefined'", "'object'", "'number'"],
+        correctAnswer: 2,
+        explanation: "Due to a legacy bug in JavaScript, typeof null returns 'object' instead of 'null'."
+      },
+      {
+        question: "Which method creates a new array with all elements that pass a test?",
+        options: ["filter()", "map()", "forEach()", "find()"],
         correctAnswer: 0,
-        explanation: "Functions in JavaScript are declared using the 'function' keyword."
+        explanation: "The filter() method creates a new array with all elements that pass the test implemented by the provided function."
       }
     ],
     react: [
@@ -2773,25 +2901,31 @@ function generateFallbackQuestions(subject, count, difficulty, gameMode) {
         question: "What is JSX in React?",
         options: ["A database", "A syntax extension", "A server", "A library"],
         correctAnswer: 1,
-        explanation: "JSX is a syntax extension that allows you to write HTML-like code in JavaScript."
+        explanation: "JSX is a syntax extension that allows you to write HTML-like code in JavaScript, making React components more readable."
       },
       {
         question: "Which hook is used for side effects in React?",
         options: ["useState", "useEffect", "useContext", "useReducer"],
         correctAnswer: 1,
-        explanation: "useEffect is used to perform side effects in functional components."
+        explanation: "useEffect is used to perform side effects in functional components, such as data fetching, subscriptions, or manually changing the DOM."
       },
       {
-        question: "What is the virtual DOM in React?",
-        options: ["A real DOM element", "A JavaScript representation of the DOM", "A CSS framework", "A database"],
+        question: "What is the purpose of the 'key' prop in React lists?",
+        options: ["Styling", "Unique identification", "Event handling", "State management"],
         correctAnswer: 1,
-        explanation: "The virtual DOM is a JavaScript representation of the real DOM that React uses for optimization."
+        explanation: "The 'key' prop helps React identify which items have changed, been added, or removed, improving rendering performance."
       },
       {
-        question: "How do you pass data from parent to child component in React?",
-        options: ["Through state", "Through props", "Through context", "Through refs"],
+        question: "How do you update state in a functional component?",
+        options: ["this.setState()", "useState setter", "setState()", "updateState()"],
         correctAnswer: 1,
-        explanation: "Props are used to pass data from parent components to child components."
+        explanation: "In functional components, you use the setter function returned by the useState hook to update state."
+      },
+      {
+        question: "What does React.StrictMode do?",
+        options: ["Improves performance", "Highlights potential problems", "Adds security", "Minifies code"],
+        correctAnswer: 1,
+        explanation: "React.StrictMode is a tool for highlighting potential problems in an application during development."
       }
     ],
     algorithms: [
@@ -2799,112 +2933,224 @@ function generateFallbackQuestions(subject, count, difficulty, gameMode) {
         question: "What is the time complexity of binary search?",
         options: ["O(n)", "O(log n)", "O(n²)", "O(1)"],
         correctAnswer: 1,
-        explanation: "Binary search has O(log n) time complexity as it halves the search space in each iteration."
+        explanation: "Binary search has O(log n) time complexity because it eliminates half of the search space with each comparison."
       },
       {
         question: "Which sorting algorithm has the best average-case time complexity?",
         options: ["Bubble Sort", "Quick Sort", "Selection Sort", "Insertion Sort"],
         correctAnswer: 1,
-        explanation: "Quick Sort has an average-case time complexity of O(n log n)."
+        explanation: "Quick Sort has an average-case time complexity of O(n log n), making it one of the most efficient sorting algorithms."
       },
       {
-        question: "What data structure uses LIFO (Last In, First Out)?",
-        options: ["Queue", "Stack", "Array", "Linked List"],
+        question: "What data structure uses LIFO (Last In, First Out) principle?",
+        options: ["Queue", "Stack", "Array", "Tree"],
         correctAnswer: 1,
-        explanation: "A stack follows the LIFO principle where the last element added is the first one removed."
+        explanation: "A stack follows the LIFO principle where the last element added is the first one to be removed."
+      },
+      {
+        question: "What is the space complexity of merge sort?",
+        options: ["O(1)", "O(log n)", "O(n)", "O(n²)"],
+        correctAnswer: 2,
+        explanation: "Merge sort requires O(n) additional space for the temporary arrays used during the merge process."
       }
     ],
     databases: [
       {
         question: "What does SQL stand for?",
-        options: ["Simple Query Language", "Structured Query Language", "Standard Query Language", "Sequential Query Language"],
+        options: ["Standard Query Language", "Structured Query Language", "System Query Language", "Simple Query Language"],
         correctAnswer: 1,
-        explanation: "SQL stands for Structured Query Language, used for managing relational databases."
+        explanation: "SQL stands for Structured Query Language, used for managing and querying relational databases."
       },
       {
-        question: "Which command is used to retrieve data from a database?",
-        options: ["GET", "FETCH", "SELECT", "RETRIEVE"],
+        question: "Which command is used to remove all records from a table?",
+        options: ["DELETE", "REMOVE", "TRUNCATE", "DROP"],
         correctAnswer: 2,
-        explanation: "The SELECT command is used to retrieve data from database tables."
+        explanation: "TRUNCATE removes all records from a table quickly and cannot be rolled back, unlike DELETE."
       },
       {
-        question: "What is a primary key in a database?",
-        options: ["A foreign reference", "A unique identifier for records", "An index", "A constraint"],
+        question: "What is a primary key?",
+        options: ["A foreign reference", "A unique identifier", "An index", "A constraint"],
         correctAnswer: 1,
-        explanation: "A primary key uniquely identifies each record in a database table."
+        explanation: "A primary key is a column or combination of columns that uniquely identifies each row in a table."
+      },
+      {
+        question: "What does ACID stand for in database transactions?",
+        options: ["Atomic, Consistent, Isolated, Durable", "Accurate, Complete, Indexed, Dynamic", "Automated, Centralized, Integrated, Distributed", "Advanced, Computed, Intelligent, Designed"],
+        correctAnswer: 0,
+        explanation: "ACID represents the four key properties of database transactions: Atomicity, Consistency, Isolation, and Durability."
       }
     ],
     security: [
       {
-        question: "What does HTTPS stand for?",
-        options: ["HyperText Transfer Protocol Secure", "HyperText Transport Protocol Secure", "HyperText Transfer Process Secure", "HyperText Transmission Protocol Secure"],
-        correctAnswer: 0,
-        explanation: "HTTPS stands for HyperText Transfer Protocol Secure, providing encrypted communication."
+        question: "What is a SQL injection attack?",
+        options: ["A database backup", "A malicious code insertion", "A performance optimization", "A data encryption method"],
+        correctAnswer: 1,
+        explanation: "SQL injection is a code injection technique that exploits vulnerabilities in an application's database layer."
       },
       {
-        question: "Which type of attack involves overwhelming a server with requests?",
-        options: ["SQL Injection", "Cross-Site Scripting", "DDoS Attack", "Man-in-the-Middle"],
+        question: "What does HTTPS provide?",
+        options: ["Faster loading", "Data encryption", "Better SEO", "File compression"],
+        correctAnswer: 1,
+        explanation: "HTTPS provides encrypted communication between the client and server, ensuring data security during transmission."
+      },
+      {
+        question: "What is two-factor authentication?",
+        options: ["Using two passwords", "Using two devices", "Two-step verification process", "Two security questions"],
         correctAnswer: 2,
-        explanation: "A DDoS (Distributed Denial of Service) attack overwhelms servers with excessive requests."
+        explanation: "Two-factor authentication adds an extra layer of security by requiring two different verification methods."
       }
     ],
     ai: [
       {
-        question: "What does AI stand for?",
-        options: ["Automated Intelligence", "Artificial Intelligence", "Advanced Intelligence", "Algorithmic Intelligence"],
+        question: "What is machine learning?",
+        options: ["Robot programming", "Computer self-improvement", "Database management", "Web development"],
         correctAnswer: 1,
-        explanation: "AI stands for Artificial Intelligence, the simulation of human intelligence in machines."
+        explanation: "Machine learning is a subset of AI that enables computers to learn and improve from experience without being explicitly programmed."
       },
       {
-        question: "Which type of machine learning requires labeled training data?",
-        options: ["Unsupervised Learning", "Supervised Learning", "Reinforcement Learning", "Semi-supervised Learning"],
+        question: "What is the difference between AI and ML?",
+        options: ["No difference", "AI is broader than ML", "ML is broader than AI", "They are unrelated"],
         correctAnswer: 1,
-        explanation: "Supervised learning uses labeled training data to learn patterns and make predictions."
-      }
-    ],
-    general: [
-      {
-        question: `What is a fundamental concept in ${subject}?`,
-        options: ["Data structures and algorithms", "Problem-solving approaches", "Best practices and patterns", "Testing and debugging"],
-        correctAnswer: 0,
-        explanation: `Understanding core concepts is essential for mastering ${subject}.`
+        explanation: "AI (Artificial Intelligence) is a broader concept that includes ML (Machine Learning) as one of its subsets."
       },
       {
-        question: `Which skill is most important when learning ${subject}?`,
-        options: ["Memorizing syntax", "Understanding concepts", "Speed of coding", "Using frameworks"],
+        question: "What is a neural network?",
+        options: ["A computer network", "A brain-inspired computing model", "A database structure", "A programming language"],
         correctAnswer: 1,
-        explanation: `Conceptual understanding is more valuable than memorization in ${subject}.`
-      },
-      {
-        question: `What is the best way to improve at ${subject}?`,
-        options: ["Reading documentation only", "Practice and experimentation", "Watching videos only", "Taking notes only"],
-        correctAnswer: 1,
-        explanation: `Active practice and experimentation lead to better understanding of ${subject}.`
+        explanation: "A neural network is a computing model inspired by biological neural networks, used in machine learning and AI."
       }
     ]
   };
-
-  const templates = questionTemplates[subject.toLowerCase()] || questionTemplates.general;
-  const questions = [];
   
-  for (let i = 0; i < count; i++) {
-    const template = templates[i % templates.length];
-    questions.push({
-      id: `fallback_${Date.now()}_${i}`,
-      question: template.question,
-      options: template.options,
-      correctAnswer: template.correctAnswer,
-      explanation: template.explanation,
+  // Get questions for the subject, fallback to general programming if not found
+  const subjectQuestions = questionTemplates[subject.toLowerCase()] || questionTemplates.javascript;
+  
+  // Adjust questions based on difficulty
+  const adjustedQuestions = subjectQuestions.map((q, index) => {
+    const basePoints = difficulty === 'easy' ? 10 : difficulty === 'medium' ? 15 : 20;
+    const timeLimit = gameMode === 'speed' ? 10 : difficulty === 'easy' ? 40 : difficulty === 'medium' ? 30 : 25;
+    
+    return {
+      id: `fallback_${subject}_${index}_${Date.now()}`,
+      question: q.question,
+      options: q.options,
+      correctAnswer: q.correctAnswer,
+      explanation: q.explanation,
       difficulty: difficulty,
       category: subject,
-      points: difficulty === 'easy' ? 10 : difficulty === 'medium' ? 15 : 20,
-      timeLimit: gameMode === 'speed' ? 10 : 30
+      points: basePoints,
+      timeLimit: timeLimit
+    };
+  });
+  
+  // Return the requested number of questions (cycle if needed)
+  const result = [];
+  for (let i = 0; i < count; i++) {
+    result.push(adjustedQuestions[i % adjustedQuestions.length]);
+  }
+    console.log(`✅ Generated ${result.length} fallback questions for ${subject}`);
+  return result;
+}
+
+// Get user's question history to prevent repetition
+app.get('/api/user/question-history', authenticateJWT, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user || !user.quizStats || !user.quizStats.questionHistory) {
+      return res.json({ 
+        questionHashes: [], 
+        totalQuestions: 0,
+        recommendations: {
+          currentLevel: 1,
+          adaptiveDifficulty: 'easy'
+        }
+      });
+    }
+
+    // Get question hashes to avoid repetition
+    const questionHashes = user.quizStats.questionHistory.map(q => q.questionHash).filter(Boolean);
+    
+    // Get user's overall performance for adaptive difficulty
+    const totalQuestions = user.quizStats.questionHistory.length;
+    const correctAnswers = user.quizStats.questionHistory.filter(q => q.wasCorrect).length;
+    const accuracyRate = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+    
+    // Calculate adaptive difficulty level
+    let currentLevel = 1;
+    if (accuracyRate >= 80 && totalQuestions >= 10) {
+      currentLevel = Math.min(10, Math.floor(totalQuestions / 10) + 1);
+    } else if (accuracyRate >= 60 && totalQuestions >= 5) {
+      currentLevel = Math.min(5, Math.floor(totalQuestions / 5) + 1);
+    }
+    
+    const adaptiveDifficulty = currentLevel <= 3 ? 'easy' : 
+                              currentLevel <= 6 ? 'medium' : 'hard';
+
+    res.json({
+      questionHashes,
+      totalQuestions,
+      recommendations: {
+        currentLevel,
+        adaptiveDifficulty,
+        accuracyRate: Math.round(accuracyRate),
+        shouldIncreaseDifficulty: accuracyRate >= 85 && totalQuestions >= 5
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching question history:', error);
+    res.status(500).json({ 
+      questionHashes: [], 
+      totalQuestions: 0,
+      recommendations: { currentLevel: 1, adaptiveDifficulty: 'easy' }
     });
   }
-  
-  console.log(`✅ Generated ${questions.length} meaningful fallback questions for ${subject}`);
-  return questions;
-}
+});
+
+app.get('/api/user/question-history/:category?', authenticateJWT, async (req, res) => {
+  try {
+    const { category } = req.params;
+    const user = await User.findById(req.user.id);
+    
+    if (!user || !user.quizStats) {
+      return res.json({ questionHistory: [], recommendations: [] });
+    }
+
+    let questionHistory = user.quizStats.questionHistory || [];
+    
+    // Filter by category if specified
+    if (category && category !== 'all') {
+      questionHistory = questionHistory.filter(q => 
+        q.category?.toLowerCase() === category.toLowerCase()
+      );
+    }
+
+    // Get recently seen questions (last 30 days)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentQuestions = questionHistory.filter(q => q.lastSeen > thirtyDaysAgo);
+
+    // Generate adaptive difficulty recommendations
+    const difficultyLevel = category && user.quizStats.difficultyLevels[category.toLowerCase()] 
+      ? user.quizStats.difficultyLevels[category.toLowerCase()]
+      : 1;
+
+    const adaptiveDifficulty = difficultyLevel <= 3 ? 'easy' : 
+                              difficultyLevel <= 6 ? 'medium' : 'hard';
+
+    res.json({
+      questionHistory: recentQuestions,
+      totalQuestionsAnswered: questionHistory.length,
+      currentDifficultyLevel: difficultyLevel,
+      recommendedDifficulty: adaptiveDifficulty,
+      masteredTopics: questionHistory.filter(q => q.masteryLevel > 80).map(q => q.category),
+      needsImprovement: questionHistory.filter(q => q.masteryLevel < 40).map(q => q.category),
+      performanceStats: user.quizStats.performanceStats
+    });
+  } catch (error) {
+    console.error('Error fetching question history:', error);
+    res.status(500).json({ error: 'Failed to fetch question history' });
+  }
+});
 
 app.post('/api/ai/generate-quiz-arena', authenticateJWT, async (req, res) => {
   try {
@@ -2915,8 +3161,32 @@ app.post('/api/ai/generate-quiz-arena', authenticateJWT, async (req, res) => {
       gameMode = 'classic',
       topics = [],
       previousQuestions = [],
-      uniqueSeed = null
+      uniqueSeed = null,
+      useAdaptiveDifficulty = true
     } = req.body;
+
+    // Get user for adaptive difficulty and question history
+    const user = await User.findById(req.user.id);
+    let adaptedDifficulty = difficulty;
+    let userQuestionHistory = [];
+
+    if (user && user.quizStats && useAdaptiveDifficulty) {
+      // Get user's difficulty level for this subject
+      const subjectKey = subject.toLowerCase();
+      const userLevel = user.quizStats.difficultyLevels[subjectKey] || 1;
+      
+      // Adapt difficulty based on user level
+      adaptedDifficulty = userLevel <= 3 ? 'easy' : 
+                         userLevel <= 6 ? 'medium' : 'hard';
+      
+      // Get user's question history to avoid repetition
+      userQuestionHistory = (user.quizStats.questionHistory || [])
+        .filter(q => q.category?.toLowerCase() === subjectKey)
+        .map(q => q.questionHash);
+      
+      console.log(`🎯 Adaptive difficulty for ${user.name}: ${adaptedDifficulty} (level ${userLevel})`);
+      console.log(`📚 Avoiding ${userQuestionHistory.length} previously seen questions`);
+    }
     
     const geminiApiKey = req.body.geminiApiKey || process.env.GEMINI_API_KEY;
     
@@ -2926,11 +3196,9 @@ app.post('/api/ai/generate-quiz-arena', authenticateJWT, async (req, res) => {
 
     if (!subject) {
       return res.status(400).json({ error: 'Subject is required' });
-    }
-
-    // Get previously used questions to avoid repetition
-    const usedQuestions = getUsedQuestions(subject, difficulty, gameMode);
-    const allPreviousQuestions = [...previousQuestions, ...usedQuestions];
+    }    // Get previously used questions to avoid repetition (combine user history + session cache)
+    const usedQuestions = getUsedQuestions(subject, adaptedDifficulty, gameMode);
+    const allPreviousQuestions = [...previousQuestions, ...usedQuestions, ...userQuestionHistory];
 
     // Build dynamic prompt based on game mode and settings
     let promptModifier = '';
@@ -2944,73 +3212,86 @@ app.post('/api/ai/generate-quiz-arena', authenticateJWT, async (req, res) => {
       case 'multiplayer':
         promptModifier = 'Create unique, engaging questions perfect for competitive multiplayer gameplay. Ensure each question is different and challenging.';
         break;
-        break;
       default:
         promptModifier = 'Create well-balanced educational questions for classic quiz mode.';
     }    const topicsText = topics.length > 0 ? `Focus on these specific topics: ${topics.join(', ')}` : '';
     const previousQuestionsText = allPreviousQuestions.length > 0 
-      ? `IMPORTANT: Avoid repeating these question topics or similar questions: ${allPreviousQuestions.join(', ')}. Make questions completely unique and different.` 
+      ? `CRITICAL ANTI-REPETITION: You must avoid creating questions similar to these ${allPreviousQuestions.length} previously seen questions. Create completely unique questions that are distinctly different in content, format, and approach.` 
       : '';
-      // Add uniqueness enforcer for multiplayer and timestamp for uniqueness
+      
+    // Enhanced uniqueness enforcer with stronger language
     const uniquenessText = gameMode === 'multiplayer' 
-      ? `CRITICAL: Generate completely unique questions that are different from any common quiz questions. Use varied question types and ensure no repetition. Add timestamp context: ${Date.now()}`
-      : `IMPORTANT: Ensure questions are unique and avoid repetition from previous sessions.`;
+      ? `MAXIMUM UNIQUENESS REQUIRED: Generate completely original questions that are entirely different from any common quiz questions. Use creative question types, varied formats, and ensure absolute uniqueness. Session ID: ${Date.now()}`
+      : `HIGH UNIQUENESS REQUIRED: Ensure questions are completely original and avoid any repetition from previous sessions. Use diverse question formats and creative approaches.`;
     
     // Add session-specific seed for more uniqueness
-    const sessionSeed = uniqueSeed || `SESSION_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const sessionSeed = uniqueSeed || `UNIQUE_${user?.id || 'anon'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Use adapted difficulty for better personalization
+    const finalDifficulty = adaptedDifficulty;
     
     const prompt = `Generate ${questionCount} multiple-choice quiz questions for: ${subject}
     
 SESSION IDENTIFIER: ${sessionSeed}
+DIFFICULTY LEVEL: ${finalDifficulty} (ADAPTIVE)
 UNIQUENESS LEVEL: ${gameMode === 'multiplayer' ? 'MAXIMUM' : 'HIGH'}
+USER EXPERIENCE LEVEL: ${user?.quizStats?.level || 1}
     
-Difficulty Level: ${difficulty}
 Game Mode: ${gameMode}
 ${promptModifier}
 ${topicsText}
 ${previousQuestionsText}
 ${uniquenessText}
 
-STRICT REQUIREMENTS:
+MANDATORY REQUIREMENTS:
 - Each question must have exactly 4 answer choices (A, B, C, D)
 - Only one correct answer per question
 - Questions should be clear, educational, and engaging
-- Include a detailed explanation for the correct answer (minimum 20 words)
-- Vary question types (factual, conceptual, application-based, analytical)
-- Ensure questions are appropriate for the specified difficulty level
-- NO DUPLICATE or similar questions
-- Make each question unique and distinctive
-- Use different question structures and formats
-- Generate a random unique ID for each question using timestamp and random values
+- Include a comprehensive explanation for the correct answer (minimum 30 words)
+- Vary question types (factual, conceptual, application-based, analytical, scenario-based)
+- Ensure questions are appropriate for ${finalDifficulty} difficulty level
+- ABSOLUTELY NO DUPLICATE or similar questions to those mentioned above
+- Make each question unique and distinctive with creative approaches
+- Use different question structures, formats, and perspectives
+- Generate truly random and unique IDs for each question
+- For ${finalDifficulty} difficulty: ${finalDifficulty === 'easy' ? 'Use straightforward concepts with clear answers' : finalDifficulty === 'medium' ? 'Include moderate complexity with some analytical thinking' : 'Include complex scenarios requiring deep understanding and critical thinking'}
+
+ANTI-REPETITION PROTOCOL:
+- Cross-reference against ${allPreviousQuestions.length} previous question patterns
+- Use entirely different question formats and structures
+- Approach topics from unique angles and perspectives
+- Create original scenarios and examples
+- Avoid common question patterns
 
 Response Format (JSON):
 {
   "questions": [
     {
-      "id": "q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}",
+      "id": "q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_unique",
       "question": "Question text",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctAnswer": 0,
-      "explanation": "Detailed explanation of why this answer is correct (minimum 20 words)",
-      "difficulty": "${difficulty}",
-      "topic": "Specific topic",
-      "points": ${difficulty === 'easy' ? 10 : difficulty === 'medium' ? 15 : 20},
+      "explanation": "Comprehensive explanation of why this answer is correct (minimum 30 words with educational value)",
+      "difficulty": "${finalDifficulty}",
+      "category": "${subject}",
+      "points": ${finalDifficulty === 'easy' ? 10 : finalDifficulty === 'medium' ? 15 : 20},
       "timeLimit": ${gameMode === 'speed' ? 10 : 30}
     }
   ],
   "gameMode": "${gameMode}",
-  "totalPoints": ${questionCount * (difficulty === 'easy' ? 10 : difficulty === 'medium' ? 15 : 20)},
+  "adaptiveDifficulty": "${finalDifficulty}",
+  "totalPoints": ${questionCount * (finalDifficulty === 'easy' ? 10 : finalDifficulty === 'medium' ? 15 : 20)},
   "averageTime": ${gameMode === 'speed' ? 10 : 30},
-  "questionGeneration": {
-    "subject": "${subject}",
-    "difficulty": "${difficulty}",
-    "count": ${questionCount},
-    "uniqueQuestions": true
-  }
+  "uniquenessLevel": "${gameMode === 'multiplayer' ? 'MAXIMUM' : 'HIGH'}",
+  "antiRepetitionApplied": true
 }
 
-CRITICAL: Make questions engaging and educational. For ${gameMode} mode: ${promptModifier}
-ENSURE: Every question is completely unique and different from typical quiz questions.`;
+CRITICAL SUCCESS FACTORS:
+1. Make questions engaging and educational for ${gameMode} mode
+2. Apply ${finalDifficulty} difficulty appropriately
+3. Ensure absolute uniqueness and zero repetition
+4. Provide valuable explanations for learning
+5. Create varied and creative question formats`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
@@ -3086,8 +3367,7 @@ ENSURE: Every question is completely unique and different from typical quiz ques
         
         // Generate truly unique ID with timestamp and random values
         const uniqueId = `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${index}`;
-        
-        return {
+          return {
           id: q.id || uniqueId,
           question: q.question,
           options: q.options.slice(0, 4), // Ensure exactly 4 options
@@ -3095,21 +3375,26 @@ ENSURE: Every question is completely unique and different from typical quiz ques
             ? q.correctAnswer 
             : 0,
           explanation: q.explanation || 'This is the correct answer based on the subject knowledge.',
-          difficulty: q.difficulty || difficulty,
+          difficulty: q.difficulty || finalDifficulty,
           category: q.topic || q.category || subject,
-          points: q.points || (difficulty === 'easy' ? 10 : difficulty === 'medium' ? 15 : 20),
+          points: q.points || (finalDifficulty === 'easy' ? 10 : finalDifficulty === 'medium' ? 15 : 20),
           timeLimit: q.timeLimit || (gameMode === 'speed' ? 10 : 30)
         };
       });
 
-      // Calculate totals      quizData.totalPoints = quizData.questions.reduce((sum, q) => sum + q.points, 0);
+      // Calculate totals and add enhanced metadata
+      quizData.totalPoints = quizData.questions.reduce((sum, q) => sum + q.points, 0);
       quizData.averageTime = Math.round(quizData.questions.reduce((sum, q) => sum + q.timeLimit, 0) / quizData.questions.length);
       quizData.gameMode = gameMode;
+      quizData.adaptiveDifficulty = finalDifficulty;
+      quizData.userLevel = user?.quizStats?.level || 1;
+      quizData.antiRepetitionApplied = allPreviousQuestions.length > 0;
       
-      // Add questions to cache to prevent future repetition
-      addQuestionsToCache(subject, difficulty, gameMode, quizData.questions);
+      // Add questions to cache to prevent future repetition (use final difficulty)
+      addQuestionsToCache(subject, finalDifficulty, gameMode, quizData.questions);
       
-      console.log(`✅ Successfully generated ${quizData.questions.length} questions and cached for uniqueness`);
+      console.log(`✅ Successfully generated ${quizData.questions.length} adaptive ${finalDifficulty} questions for ${gameMode} mode`);
+      console.log(`🚫 Applied anti-repetition for ${allPreviousQuestions.length} previous questions`);
         } catch (parseError) {
       console.error('🚨 CRITICAL: AI Response Parsing Failed!');
       console.error('📝 Parse Error:', parseError.message);
@@ -3124,18 +3409,19 @@ ENSURE: Every question is completely unique and different from typical quiz ques
       } else {
         console.error('📋 No JSON code block found in AI response');
       }
-      
-      // Fallback: Generate basic questions if AI parsing fails
+        // Fallback: Generate basic questions if AI parsing fails
       console.log('🔄 Generating fallback questions...');
         quizData = {
-        questions: generateFallbackQuestions(subject, questionCount, difficulty, gameMode),
+        questions: generateFallbackQuestions(subject, questionCount, finalDifficulty, gameMode),
         gameMode: gameMode,
-        totalPoints: questionCount * (difficulty === 'easy' ? 10 : difficulty === 'medium' ? 15 : 20),
-        averageTime: gameMode === 'speed' ? 10 : 30
+        adaptiveDifficulty: finalDifficulty,
+        totalPoints: questionCount * (finalDifficulty === 'easy' ? 10 : finalDifficulty === 'medium' ? 15 : 20),
+        averageTime: gameMode === 'speed' ? 10 : 30,
+        fallbackGenerated: true
       };
       
-      // Add fallback questions to cache as well
-      addQuestionsToCache(subject, difficulty, gameMode, quizData.questions);
+      // Add fallback questions to cache as well (use final difficulty)
+      addQuestionsToCache(subject, finalDifficulty, gameMode, quizData.questions);
     }
 
     res.json({
