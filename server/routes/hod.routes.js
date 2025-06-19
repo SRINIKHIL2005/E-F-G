@@ -1557,13 +1557,14 @@ router.get('/dashboard-summary', authenticateJWT, async (req, res) => {
   try {
     console.log('📊 HOD Dashboard Summary endpoint called');
     console.log('👤 User from token:', req.user);
-    
-    // Check if models are initialized
+      // Check if models are initialized
     if (!Course || !FeedbackForm || !FeedbackResponse || !Attendance) {
       if (!initModels()) {
         return res.status(503).json({ error: 'Service Unavailable', message: 'Database models not yet initialized' });
       }
-    }    // For development, get ALL data without department filtering to see what's available
+    }
+    
+    // For development, get ALL data without department filtering to see what's available
     const isDev = process.env.NODE_ENV !== 'production';
     console.log('🔧 Development mode:', isDev);
     
@@ -1598,9 +1599,9 @@ router.get('/dashboard-summary', authenticateJWT, async (req, res) => {
         }
       }
     }
+      console.log('🏫 Using department:', department);
     
-    console.log('🏫 Using department:', department);
-      // In development mode, count ALL records for easier testing
+    // In development mode, count ALL records for easier testing
     // In production, we'll filter by department
     const studentQuery = isDev ? { role: 'student' } : { role: 'student', department };
     const teacherQuery = isDev ? { role: 'teacher' } : { role: 'teacher', department };
@@ -1614,15 +1615,16 @@ router.get('/dashboard-summary', authenticateJWT, async (req, res) => {
       courses: await Course.countDocuments({}),
       feedbackForms: await FeedbackForm.countDocuments({}),
       feedbackResponses: await FeedbackResponse.countDocuments({})
-    };
-    console.log('📊 Total records in database:', dbSummary);
-      // Get counts from database 
+    };    console.log('📊 Total records in database:', dbSummary);
+    
+    // Get counts from database 
     const totalStudents = await User.countDocuments(studentQuery).catch(() => 0);
     const totalTeachers = await User.countDocuments(teacherQuery).catch(() => 0);
     const totalCourses = await Course.countDocuments(courseQuery).catch(() => 0);
     const totalFeedbackForms = await FeedbackForm.countDocuments(feedbackFormQuery).catch(() => 0);
     const totalFeedbacks = await FeedbackResponse.countDocuments({}).catch(() => 0);
-      console.log(`📊 Found: ${totalStudents} students, ${totalTeachers} teachers, ${totalCourses} courses`);
+    
+    console.log(`📊 Found: ${totalStudents} students, ${totalTeachers} teachers, ${totalCourses} courses`);
     console.log(`📝 Found: ${totalFeedbackForms} feedback forms, ${totalFeedbacks} feedback responses`);
     console.log('🔍 Note: totalFeedbacks represents feedback responses/submissions, not forms');
     
@@ -1643,8 +1645,7 @@ router.get('/dashboard-summary', authenticateJWT, async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(10)  // Increased limit to see more data
       .select('-password');
-      
-    // Get all faculty
+        // Get all faculty
     const recentFaculty = await User.find(teacherQuery)
       .sort({ createdAt: -1 })
       .limit(10)  // Increased limit to see more data
@@ -1655,9 +1656,9 @@ router.get('/dashboard-summary', authenticateJWT, async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(10)  // Increased limit to see more data
       .populate('teacher', 'name email');
-      
-    console.log(`📝 Prepared data: ${recentStudents.length} students, ${recentFaculty.length} faculty, ${recentCourses.length} courses`);
-      // Build and send response
+        console.log(`📝 Prepared data: ${recentStudents.length} students, ${recentFaculty.length} faculty, ${recentCourses.length} courses`);
+    
+    // Build and send response
     const dashboardData = {
       summary: {
         totalStudents,
@@ -1692,98 +1693,41 @@ router.get('/debug-dashboard', async (req, res) => {
   try {
     console.log('🐞 Debug dashboard route called');
     
-    if (!Course || !FeedbackForm || !FeedbackResponse || !Attendance) {
-      if (!initModels()) {
-        return res.status(503).json({ error: 'Service Unavailable', message: 'Database models not yet initialized' });
-      }
-    }
-      // Check what departments exist in the database first
-    const allStudentDepts = await User.distinct('department', { role: 'student' });
-    const allTeacherDepts = await User.distinct('department', { role: 'teacher' });
-    console.log('📊 Available student departments:', allStudentDepts);
-    console.log('📊 Available teacher departments:', allTeacherDepts);
+    // Simple counts without complex logic
+    const totalStudents = await User.countDocuments({ role: 'student' });
+    const totalTeachers = await User.countDocuments({ role: 'teacher' });
     
-    // For development, get ALL users without department filtering to see what's available
-    const isDev = process.env.NODE_ENV !== 'production';
-    let department = 'Engineering'; // Default
+    console.log(`🐞 SIMPLE COUNT: ${totalStudents} students, ${totalTeachers} teachers`);
     
-    if (isDev) {
-      // Use the department with the most users, or get all users
-      const allUsers = await User.find({ role: { $in: ['student', 'teacher'] } });
-      const deptCounts = {};
-      allUsers.forEach(user => {
-        if (user.department) {
-          deptCounts[user.department] = (deptCounts[user.department] || 0) + 1;
-        }
-      });
-      
-      if (Object.keys(deptCounts).length > 0) {
-        department = Object.keys(deptCounts).sort((a, b) => deptCounts[b] - deptCounts[a])[0];
-        console.log(`🔄 Using most popular department: ${department} (${deptCounts[department]} users)`);
-      }
-    }
+    // Get sample data
+    const sampleStudents = await User.find({ role: 'student' }).limit(5).select('name email department');
+    const sampleTeachers = await User.find({ role: 'teacher' }).limit(5).select('name email department');
     
-    console.log('🏫 Using department:', department);
-    
-    // Get counts from database - in dev mode, get ALL users regardless of department
-    const totalStudents = isDev ? 
-      await User.countDocuments({ role: 'student' }) : 
-      await User.countDocuments({ role: 'student', department });
-      
-    const totalTeachers = isDev ? 
-      await User.countDocuments({ role: 'teacher' }) :      await User.countDocuments({ role: 'teacher', department });
-      
-    // Debug: Check both with and without department filtering
-    const totalFeedbackFormsAll = await FeedbackForm.countDocuments({}).catch(() => 0);
-    const totalFeedbackFormsDept = await FeedbackForm.countDocuments({ department }).catch(() => 0);
-    
-    // Use the same isDev variable declared earlier
-    const totalFeedbackForms = (isDev && totalFeedbackFormsDept === 0) ? totalFeedbackFormsAll : totalFeedbackFormsDept;
-    
-    const totalFeedbacks = await FeedbackResponse.countDocuments().catch(() => 0);
-      console.log(`🐞 DEBUG ENDPOINT: ${totalStudents} students, ${totalTeachers} teachers, ${totalCourses} courses`);
-    console.log(`🐞 DEBUG ENDPOINT: ${totalFeedbackForms} feedback forms, ${totalFeedbacks} feedback responses`);
-    
-    // Get actual sample data for debugging
-    const sampleStudents = await User.find({ role: 'student' }).limit(3).select('name email department');
-    const sampleTeachers = await User.find({ role: 'teacher' }).limit(3).select('name email department');
     console.log('🐞 Sample students:', sampleStudents.map(s => `${s.name} (${s.department})`));
     console.log('🐞 Sample teachers:', sampleTeachers.map(t => `${t.name} (${t.department})`));
     
-    // Debug: Check all feedback forms in database
-    const allFeedbackForms = await FeedbackForm.find({}).catch(() => []);
-    const allFeedbackResponses = await FeedbackResponse.find({}).catch(() => []);
-    console.log(`🐞 DEBUG: Found ${allFeedbackForms.length} total feedback forms in database`);
-    console.log(`🐞 DEBUG: Found ${allFeedbackResponses.length} total feedback responses in database`);
-    if (allFeedbackForms.length > 0) {
-      console.log('🐞 DEBUG: Feedback form departments:', allFeedbackForms.map(f => f.department));
-    }
-      // Get counts for courses - in dev mode, get ALL courses
-    const totalCourses = isDev ? 
-      await Course.countDocuments({}) : 
-      await Course.countDocuments({ department });
-      // Build response
+    // Build simple response
     const responseData = {
       summary: {
         totalStudents,
         totalFaculty: totalTeachers,
-        totalCourses,
-        totalFeedbacks: totalFeedbackForms, // Changed to count feedback forms instead of responses
-        totalFeedbackResponses: totalFeedbacks, // Add separate field for responses
+        totalCourses: 0,
+        totalFeedbacks: 0,
+        totalFeedbackResponses: 0,
         facultyGrowth: 0,
         studentGrowth: 0,
         courseGrowth: 0,
         feedbackGrowth: 0,
-        attendanceRate: 85, // Default value for demo
-        feedbackResponseRate: 75, // Default value for demo
+        attendanceRate: 85,
+        feedbackResponseRate: 75,
         activeUsers: totalStudents + totalTeachers
       },
-      faculty: [],
-      students: [],
+      faculty: sampleTeachers,
+      students: sampleStudents,
       courses: []
     };
     
-    console.log('✅ Debug dashboard data:', responseData);
+    console.log('✅ Simple debug dashboard data ready');
     res.json(responseData);
   } catch (error) {
     console.error('❌ Error in debug dashboard route:', error);
