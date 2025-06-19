@@ -195,7 +195,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ): Promise<AuthResponse> => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/auth/register`, {
+      console.log('🚀 Using UNIQUE registration endpoint from AuthContext');
+      const response = await fetch(`${API_URL}/auth/register-unique`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         mode: 'cors',
