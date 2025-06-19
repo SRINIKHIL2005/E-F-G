@@ -19,10 +19,10 @@ const SignUpPage: React.FC = () => {
     console.log('🔢 Number of fields received:', Object.keys(formData || {}).length);
     console.log('📋 Field names received:', Object.keys(formData || {}));
 
-    try {
+    try {      console.log('🔍 Using UNIQUE registration endpoint to avoid email conflicts');
       console.log('🔍 Sending registration data:', JSON.stringify(formData, null, 2));
       
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch('/api/auth/register-unique', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
