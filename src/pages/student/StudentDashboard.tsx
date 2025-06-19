@@ -294,11 +294,10 @@ const StudentDashboard: React.FC = () => {
           summary && (
             <Tabs defaultValue={activeTab} onValueChange={setActiveTab} className="space-y-6 relative">
               {/* Refreshing overlay */}
-              {refreshing && (
-                <div className="absolute inset-0 bg-white/70 z-10 flex items-center justify-center rounded-lg">
-                  <div className="flex flex-col items-center p-4 bg-white rounded-lg shadow-lg">
+              {refreshing && (                <div className="absolute inset-0 bg-background/70 z-10 flex items-center justify-center rounded-lg">
+                  <div className="flex flex-col items-center p-4 bg-card rounded-lg shadow-lg border">
                     <RefreshCw size={24} className="text-edu-primary animate-spin mb-2" />
-                    <p className="text-sm font-medium text-gray-700">Refreshing dashboard data...</p>
+                    <p className="text-sm font-medium text-foreground">Refreshing dashboard data...</p>
                   </div>
                 </div>
               )}
