@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => {
         },
       },
       headers: {
-        "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+        "Cross-Origin-Opener-Policy": "unsafe-none",
         "Cross-Origin-Embedder-Policy": "unsafe-none",
       },
       hmr: {
@@ -53,6 +53,8 @@ export default defineConfig(({ mode }) => {
       headers: {
         "Cache-Control": "no-cache",
         "Access-Control-Allow-Origin": "*",
+        "Cross-Origin-Opener-Policy": "unsafe-none",
+        "Cross-Origin-Embedder-Policy": "unsafe-none",
       },
     },
     plugins: [

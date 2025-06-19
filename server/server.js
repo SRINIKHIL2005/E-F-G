@@ -110,6 +110,18 @@ app.use(enhancedSecurityMiddleware.compression);
 // Apply general API rate limiting
 app.use(enhancedSecurityMiddleware.rateLimiting.apiLimiter);
 
+// 3.6️⃣ Override COOP headers specifically for Google OAuth compatibility
+app.use((req, res, next) => {
+  // Explicitly disable Cross-Origin-Opener-Policy to fix Google Sign-In
+  res.setHeader('Cross-Origin-Opener-Policy', 'unsafe-none');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+  // Ensure CORS headers are properly set
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  next();
+});
+
 // 4️⃣ Configure Firebase Admin (ONLY ONCE)
 const __dirname = dirname(fileURLToPath(import.meta.url));
 try {

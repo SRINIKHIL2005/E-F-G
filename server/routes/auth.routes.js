@@ -480,4 +480,126 @@ router.post('/google', async (req, res) => {
   }
 });
 
+// Google OAuth callback endpoint for redirect flow
+router.post('/google/callback', async (req, res) => {
+  try {
+    const { code, state } = req.body;
+
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        message: 'Authorization code is required'
+      });
+    }
+
+    // Exchange authorization code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        code: code,
+        grant_type: 'authorization_code',
+        redirect_uri: `${process.env.FRONTEND_URL || 'http://localhost:8080'}/auth/google/callback`,
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      throw new Error('Failed to exchange code for tokens');
+    }
+
+    const tokens = await tokenResponse.json();
+
+    // Get user info from Google
+    const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+      },
+    });
+
+    if (!userResponse.ok) {
+      throw new Error('Failed to get user information');
+    }
+
+    const googleUser = await userResponse.json();
+
+    // Find or create user in database
+    let user = await User.findOne({ email: googleUser.email.toLowerCase() });
+    
+    if (!user) {
+      // Create new user
+      user = new User({
+        name: googleUser.name,
+        email: googleUser.email.toLowerCase(),
+        googleId: googleUser.id,
+        profilePicture: googleUser.picture,
+        role: 'student', // Default role
+        department: 'General', // Default department
+        isVerified: true, // Google accounts are pre-verified
+        createdAt: new Date(),
+        lastLogin: new Date()
+      });
+      
+      await user.save();
+      console.log(`✅ New user created via Google OAuth: ${user.email}`);
+    } else {
+      // Update existing user
+      user.lastLogin = new Date();
+      if (!user.googleId) user.googleId = googleUser.id;
+      if (!user.profilePicture) user.profilePicture = googleUser.picture;
+      await user.save();
+      console.log(`✅ Existing user signed in via Google OAuth: ${user.email}`);
+    }
+
+    // Generate JWT token
+    const jwtToken = jwt.sign(
+      { 
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        department: user.department
+      },
+      process.env.JWT_SECRET || 'your_jwt_secret',
+      { expiresIn: '7d' }
+    );
+
+    // Return credential (similar to firebase auth)
+    const credential = jwt.sign(
+      {
+        sub: user.googleId || user._id,
+        email: user.email,
+        name: user.name,
+        picture: user.profilePicture
+      },
+      process.env.JWT_SECRET || 'your_jwt_secret',
+      { expiresIn: '1h' }
+    );
+
+    res.json({
+      success: true,
+      credential: credential,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        department: user.department,
+        profilePicture: user.profilePicture
+      },
+      token: jwtToken
+    });
+
+  } catch (error) {
+    console.error('Google OAuth callback error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'OAuth callback failed',
+      error: error.message
+    });
+  }
+});
+
 export default router;
