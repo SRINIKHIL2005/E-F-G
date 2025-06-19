@@ -1237,14 +1237,13 @@ const AIQuizArena: React.FC = () => {
 
   if (gameMode === 'results' && currentSession) {
     return (
-      <AppLayout pageTitle="Quiz Results">
-        <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-6">
+      <AppLayout pageTitle="Quiz Results">        <div className="min-h-screen bg-gradient-to-br from-primary via-purple-600 to-primary/80 dark:from-purple-900 dark:via-blue-900 dark:to-indigo-900 p-6">
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             className="max-w-2xl mx-auto"
           >
-            <Card className="text-center bg-white/10 backdrop-blur border-white/20 text-white">
+            <Card className="text-center bg-card/90 backdrop-blur border shadow-lg">
               <CardHeader>
                 <motion.div
                   initial={{ rotate: 0 }}
@@ -1258,30 +1257,30 @@ const AIQuizArena: React.FC = () => {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white/10 rounded-lg p-4">
-                    <p className="text-sm opacity-80">Final Score</p>
-                    <p className="text-2xl font-bold">{currentSession.score}</p>
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Final Score</p>
+                    <p className="text-2xl font-bold text-foreground">{currentSession.score}</p>
                   </div>
-                  <div className="bg-white/10 rounded-lg p-4">
-                    <p className="text-sm opacity-80">Best Streak</p>
-                    <p className="text-2xl font-bold">{currentSession.streak}</p>
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Best Streak</p>
+                    <p className="text-2xl font-bold text-foreground">{currentSession.streak}</p>
                   </div>
-                  <div className="bg-white/10 rounded-lg p-4">
-                    <p className="text-sm opacity-80">Accuracy</p>
-                    <p className="text-2xl font-bold">
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Accuracy</p>
+                    <p className="text-2xl font-bold text-foreground">
                       {Math.round((currentSession.score / (currentSession.questions.length * 100)) * 100)}%
                     </p>
                   </div>
-                  <div className="bg-white/10 rounded-lg p-4">
-                    <p className="text-sm opacity-80">Time Taken</p>
-                    <p className="text-2xl font-bold">
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Time Taken</p>
+                    <p className="text-2xl font-bold text-foreground">
                       {Math.round((Date.now() - currentSession.startTime.getTime()) / 60000)}m
                     </p>
                   </div>
                 </div>
                 
                 <div className="space-y-2">
-                  <Button onClick={resetQuiz} className="w-full bg-purple-600 hover:bg-purple-700">
+                  <Button onClick={resetQuiz} className="w-full">
                     <RotateCcw className="h-4 w-4 mr-2" />
                     Play Again
                   </Button>
@@ -1302,33 +1301,32 @@ const AIQuizArena: React.FC = () => {
     if (!question) return null;
 
     return (
-      <AppLayout pageTitle="Quiz Arena - Playing">
-        <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 p-6">
+      <AppLayout pageTitle="Quiz Arena - Playing">        <div className="min-h-screen bg-gradient-to-br from-primary via-purple-600 to-primary/80 dark:from-indigo-900 dark:via-purple-900 dark:to-pink-900 p-6">
           
           {/* Game HUD */}
           <div className="max-w-4xl mx-auto mb-6">
-            <div className="flex items-center justify-between bg-white/10 backdrop-blur rounded-lg p-4 text-white">
+            <div className="flex items-center justify-between bg-card/80 backdrop-blur rounded-lg p-4 border shadow-sm">
               <div className="flex items-center space-x-6">
                 <div className="flex items-center space-x-2">
-                  <Trophy className="h-5 w-5 text-yellow-400" />
-                  <span className="font-bold">{currentSession.score}</span>
+                  <Trophy className="h-5 w-5 text-yellow-500" />
+                  <span className="font-bold text-foreground">{currentSession.score}</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Flame className="h-5 w-5 text-orange-400" />
-                  <span>Streak: {currentSession.streak}</span>
+                  <Flame className="h-5 w-5 text-orange-500" />
+                  <span className="text-foreground">Streak: {currentSession.streak}</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span>Lives:</span>
+                  <span className="text-foreground">Lives:</span>
                   {Array.from({ length: currentSession.lives }).map((_, i) => (
-                    <span key={i} className="text-red-400">❤️</span>
+                    <span key={i} className="text-red-500">❤️</span>
                   ))}
                 </div>
               </div>
               
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
-                  <Clock className="h-5 w-5" />
-                  <span className={`font-bold ${timeLeft <= 5 ? 'text-red-400 animate-pulse' : ''}`}>
+                  <Clock className="h-5 w-5 text-foreground" />
+                  <span className={`font-bold ${timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-foreground'}`}>
                     {timeLeft}s
                   </span>
                 </div>
@@ -1336,7 +1334,7 @@ const AIQuizArena: React.FC = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => setSoundEnabled(!soundEnabled)}
-                  className="text-white hover:bg-white/20"
+                  className="hover:bg-muted"
                 >
                   {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
                 </Button>
@@ -1351,20 +1349,19 @@ const AIQuizArena: React.FC = () => {
               initial={{ opacity: 0, x: 100 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -100 }}
-            >
-              <Card className="bg-white/10 backdrop-blur border-white/20 text-white mb-6">
+            >              <Card className="bg-card/90 backdrop-blur border shadow-sm mb-6">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <Badge className="bg-purple-600">
+                    <Badge className="bg-primary">
                       Question {currentSession.currentQuestionIndex + 1} of {currentSession.questions.length}
                     </Badge>
-                    <Badge variant="outline" className="border-white/30 text-white">
+                    <Badge variant="outline">
                       {question.points} points
                     </Badge>
                   </div>
-                  <CardTitle className="text-xl mt-4">{question.question}</CardTitle>
+                  <CardTitle className="text-xl mt-4 text-foreground">{question.question}</CardTitle>
                 </CardHeader>
-              </Card>              {/* Answer Options */}
+              </Card>{/* Answer Options */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 {question.options.map((option, index) => {
                   const isSelected = selectedAnswer === index;
@@ -1384,15 +1381,16 @@ const AIQuizArena: React.FC = () => {
                     if (index !== selectedWrongIndex) {
                       return null; // Hide this wrong option
                     }
-                  }
-                  
-                  let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
+                  }                  
+                  let buttonClass = 'bg-card hover:bg-muted border text-foreground';
                   
                   if (showResult) {
                     if (isCorrect) {
-                      buttonClass = 'bg-green-500 border-green-400 text-white';
+                      buttonClass = 'bg-green-500 hover:bg-green-600 border-green-400 text-white';
                     } else if (isSelected && !isCorrect) {
-                      buttonClass = 'bg-red-500 border-red-400 text-white';
+                      buttonClass = 'bg-red-500 hover:bg-red-600 border-red-400 text-white';
+                    } else {
+                      buttonClass = 'bg-muted/50 border text-muted-foreground';
                     }
                   }
 
@@ -1425,16 +1423,15 @@ const AIQuizArena: React.FC = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                  >
-                    <Card className="bg-blue-500/20 backdrop-blur border-blue-400/30 text-white">
+                  >                    <Card className="bg-blue-50 dark:bg-blue-950/50 backdrop-blur border-blue-200 dark:border-blue-800">
                       <CardContent className="pt-6">
                         <div className="flex items-start space-x-3">
                           <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                            <Brain className="h-4 w-4" />
+                            <Brain className="h-4 w-4 text-white" />
                           </div>
                           <div>
-                            <h4 className="font-semibold mb-2">Explanation</h4>
-                            <p className="text-blue-100">{question.explanation}</p>
+                            <h4 className="font-semibold mb-2 text-foreground">Explanation</h4>
+                            <p className="text-blue-700 dark:text-blue-200">{question.explanation}</p>
                           </div>
                         </div>
                       </CardContent>
@@ -1452,8 +1449,7 @@ const AIQuizArena: React.FC = () => {
                   {activePowerUps.doublePoints && (
                     <motion.div
                       initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="bg-yellow-500/20 backdrop-blur border border-yellow-400 rounded-lg px-3 py-1 text-yellow-300 text-sm font-medium"
+                      animate={{ scale: 1 }}                      className="bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded-lg px-3 py-1 text-yellow-800 dark:text-yellow-200 text-sm font-medium"
                     >
                       💎 Double Points Active
                     </motion.div>
@@ -1462,7 +1458,8 @@ const AIQuizArena: React.FC = () => {
                     <motion.div
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      className="bg-blue-500/20 backdrop-blur border border-blue-400 rounded-lg px-3 py-1 text-blue-300 text-sm font-medium"                    >
+                      className="bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg px-3 py-1 text-blue-800 dark:text-blue-200 text-sm font-medium"
+                    >
                       ✂️ 50/50 Applied
                     </motion.div>
                   )}
@@ -1477,24 +1474,22 @@ const AIQuizArena: React.FC = () => {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => usePowerUp(powerUp.id)}
-                    className="bg-white/20 backdrop-blur border border-white/30 rounded-lg p-3 text-white hover:bg-white/30 transition-colors"
+                    className="bg-card/80 backdrop-blur border rounded-lg p-3 hover:bg-muted transition-colors"
                     disabled={selectedAnswer !== null}
                   >
                     <div className="text-xl mb-1">{powerUp.icon}</div>
-                    <div className="text-xs font-medium">{powerUp.cost} coins</div>
+                    <div className="text-xs font-medium text-foreground">{powerUp.cost} coins</div>
                   </motion.button>
                 ))}
               </div>
             </div>
-          </div>
-
-          {/* Multiplayer UI for when in multiplayer mode */}
+          </div>          {/* Multiplayer UI for when in multiplayer mode */}
           {currentSession?.mode === 'multiplayer' && multiplayerState.opponent && (
-            <div className="fixed top-20 right-6 bg-white/10 backdrop-blur border border-white/20 rounded-lg p-4 text-white">
-              <div className="text-sm font-medium mb-2">Opponent: {multiplayerState.opponent.name}</div>
-              <div className="text-xs opacity-80">Score: {multiplayerState.opponentScore}</div>
+            <div className="fixed top-20 right-6 bg-card/90 backdrop-blur border rounded-lg p-4 shadow-lg">
+              <div className="text-sm font-medium mb-2 text-foreground">Opponent: {multiplayerState.opponent.name}</div>
+              <div className="text-xs text-muted-foreground">Score: {multiplayerState.opponentScore}</div>
               {multiplayerState.opponentAnswered && (
-                <div className="text-xs text-green-400 mt-1">✓ Answered</div>
+                <div className="text-xs text-green-600 dark:text-green-400 mt-1">✓ Answered</div>
               )}
             </div>
           )}
@@ -1506,20 +1501,18 @@ const AIQuizArena: React.FC = () => {
   // Main Menu
   return (
     <AppLayout pageTitle="AI Quiz Arena">
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-primary via-purple-600 to-primary/80 dark:from-purple-900 dark:via-blue-900 dark:to-indigo-900 p-6">
         
         {/* Connection Status */}
         {showConnectionError && (
-          <div className="fixed top-4 right-4 bg-red-500/20 backdrop-blur border border-red-400 rounded-lg p-3 text-red-300 text-sm">
+          <div className="fixed top-4 right-4 bg-red-100 dark:bg-red-900/20 backdrop-blur border border-red-300 dark:border-red-700 rounded-lg p-3 text-red-800 dark:text-red-200 text-sm shadow-lg">
             <div className="flex items-center space-x-2">
               <WifiOff className="h-4 w-4" />
               <span>Connection lost. Reconnecting...</span>
             </div>
           </div>
-        )}
-
-        {isConnected && (
-          <div className="fixed top-4 right-4 bg-green-500/20 backdrop-blur border border-green-400 rounded-lg p-3 text-green-300 text-sm">
+        )}        {isConnected && (
+          <div className="fixed top-4 right-4 bg-green-100 dark:bg-green-900/20 backdrop-blur border border-green-300 dark:border-green-700 rounded-lg p-3 text-green-800 dark:text-green-200 text-sm shadow-lg">
             <div className="flex items-center space-x-2">
               <Wifi className="h-4 w-4" />
               <span>Connected</span>
@@ -1542,9 +1535,8 @@ const AIQuizArena: React.FC = () => {
               >
                 <Zap className="h-8 w-8 text-white" />
               </motion.div>
-              <h1 className="text-4xl font-bold text-white">AI Quiz Arena</h1>
-            </div>
-            <p className="text-xl text-purple-200">
+              <h1 className="text-4xl font-bold text-foreground">AI Quiz Arena</h1>
+            </div>            <p className="text-xl text-purple-200 dark:text-purple-300">
               Challenge yourself with AI-powered quizzes and compete with others!
             </p>
           </motion.div>
@@ -1555,12 +1547,12 @@ const AIQuizArena: React.FC = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="mb-8"
           >
-            <Card className="bg-white/10 backdrop-blur border-white/20 text-white">
+            <Card className="bg-card/90 backdrop-blur border shadow-lg">
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
+                <CardTitle className="flex items-center justify-between text-foreground">
                   <span>Player Statistics</span>
                   <div className="flex items-center space-x-2">
-                    <Crown className="h-5 w-5 text-yellow-400" />
+                    <Crown className="h-5 w-5 text-yellow-500" />
                     <span>Level {playerStats.level}</span>
                   </div>
                 </CardTitle>
@@ -1568,24 +1560,23 @@ const AIQuizArena: React.FC = () => {
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-yellow-400">{playerStats.coins}</div>
-                    <div className="text-sm opacity-80">Coins</div>
+                    <div className="text-2xl font-bold text-yellow-500">{playerStats.coins}</div>
+                    <div className="text-sm text-muted-foreground">Coins</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-400">{playerStats.xp}</div>
-                    <div className="text-sm opacity-80">XP</div>
+                    <div className="text-2xl font-bold text-blue-500">{playerStats.xp}</div>
+                    <div className="text-sm text-muted-foreground">XP</div>
+                  </div>                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-500">{playerStats.correctAnswers}</div>
+                    <div className="text-sm text-muted-foreground">Correct</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-400">{playerStats.correctAnswers}</div>
-                    <div className="text-sm opacity-80">Correct</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-400">{playerStats.bestStreak}</div>
-                    <div className="text-sm opacity-80">Best Streak</div>
+                    <div className="text-2xl font-bold text-orange-500">{playerStats.bestStreak}</div>
+                    <div className="text-sm text-muted-foreground">Best Streak</div>
                   </div>
                 </div>
                 <div className="mt-4">
-                  <div className="flex justify-between text-sm mb-1">
+                  <div className="flex justify-between text-sm mb-1 text-foreground">
                     <span>Progress to Level {playerStats.level + 1}</span>
                     <span>{playerStats.xp % 100}/100</span>
                   </div>
@@ -1602,7 +1593,7 @@ const AIQuizArena: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               className="mb-6"
             >
-              <Card className="bg-yellow-500/20 backdrop-blur border-yellow-400/30 text-white">
+              <Card className="bg-yellow-100 dark:bg-yellow-900/20 backdrop-blur border-yellow-300 dark:border-yellow-700">
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
@@ -1637,10 +1628,9 @@ const AIQuizArena: React.FC = () => {
               <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-              >
-                <Card className="bg-white/10 backdrop-blur border-white/20 text-white">
+              >                <Card className="bg-card/90 backdrop-blur border shadow-lg">
                   <CardHeader>
-                    <CardTitle className="flex items-center">
+                    <CardTitle className="flex items-center text-foreground">
                       <Gamepad2 className="h-5 w-5 mr-2" />
                       Choose Your Challenge
                     </CardTitle>
@@ -1650,16 +1640,15 @@ const AIQuizArena: React.FC = () => {
                     {/* Battle Arena - Multiplayer */}
                     <motion.div
                       whileHover={{ scale: 1.02 }}
-                      className="border border-purple-400/30 rounded-lg p-4 cursor-pointer hover:bg-purple-500/20 transition-colors"
+                      className="border border-purple-200 dark:border-purple-700 rounded-lg p-4 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center space-x-3">
                           <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
                             <Sword className="h-6 w-6 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-lg">Battle Arena</h3>
-                            <p className="text-sm opacity-80">Real-time multiplayer battles</p>
+                          </div>                          <div>
+                            <h3 className="font-bold text-lg text-foreground">Battle Arena</h3>
+                            <p className="text-sm text-muted-foreground">Real-time multiplayer battles</p>
                           </div>
                         </div>
                         <Badge className="bg-purple-600">Multiplayer</Badge>
@@ -1669,14 +1658,14 @@ const AIQuizArena: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                           {categories.map(category => (
                             <div key={category.id} className="space-y-2">
-                              <div className="text-sm font-medium">{category.name}</div>
+                              <div className="text-sm font-medium text-foreground">{category.name}</div>
                               <div className="flex space-x-1">
                                 {['Easy', 'Medium', 'Hard'].map(difficulty => (
                                   <Button
                                     key={difficulty}
                                     size="sm"
                                     variant="outline"
-                                    className="flex-1 text-xs border-white/30 text-white hover:bg-white/20"
+                                    className="flex-1 text-xs"
                                     onClick={() => joinMultiplayerQueue(category.id, difficulty.toLowerCase())}
                                   >
                                     {difficulty}
@@ -1691,24 +1680,21 @@ const AIQuizArena: React.FC = () => {
                           <div className="text-yellow-400">Searching for opponent...</div>
                         </div>
                       )}
-                    </motion.div>
-
-                    {/* Classic Mode */}
+                    </motion.div>                    {/* Classic Mode */}
                     <motion.div
                       whileHover={{ scale: 1.02 }}
-                      className="border border-blue-400/30 rounded-lg p-4"
-                    >
-                      <div className="flex items-center justify-between mb-3">
+                      className="border border-blue-200 dark:border-blue-700 rounded-lg p-4 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                    ><div className="flex items-center justify-between mb-3">
                         <div className="flex items-center space-x-3">
                           <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
                             <Brain className="h-6 w-6 text-white" />
                           </div>
                           <div>
-                            <h3 className="font-bold text-lg">Classic Mode</h3>
-                            <p className="text-sm opacity-80">Traditional quiz experience</p>
+                            <h3 className="font-bold text-lg text-foreground">Classic Mode</h3>
+                            <p className="text-sm text-muted-foreground">Traditional quiz experience</p>
                           </div>
                         </div>
-                        <Badge variant="outline" className="border-white/30 text-white">Single Player</Badge>
+                        <Badge variant="outline">Single Player</Badge>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {categories.map(category => (
@@ -1716,7 +1702,6 @@ const AIQuizArena: React.FC = () => {
                             key={category.id}
                             variant="outline"
                             size="sm"
-                            className="border-white/30 text-white hover:bg-white/20"
                             onClick={() => startQuiz(category.id, 'classic')}
                           >
                             {category.icon} {category.name}
@@ -1728,19 +1713,18 @@ const AIQuizArena: React.FC = () => {
                     {/* Speed Round */}
                     <motion.div
                       whileHover={{ scale: 1.02 }}
-                      className="border border-orange-400/30 rounded-lg p-4"
-                    >
-                      <div className="flex items-center justify-between mb-3">
+                      className="border border-orange-200 dark:border-orange-700 rounded-lg p-4 cursor-pointer hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+                    >                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center space-x-3">
                           <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
                             <Zap className="h-6 w-6 text-white" />
                           </div>
                           <div>
-                            <h3 className="font-bold text-lg">Speed Round</h3>
-                            <p className="text-sm opacity-80">Fast-paced questions</p>
+                            <h3 className="font-bold text-lg text-foreground">Speed Round</h3>
+                            <p className="text-sm text-muted-foreground">Fast-paced questions</p>
                           </div>
                         </div>
-                        <Badge variant="outline" className="border-white/30 text-white">10s per Q</Badge>
+                        <Badge variant="outline">10s per Q</Badge>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {categories.map(category => (
@@ -1748,7 +1732,6 @@ const AIQuizArena: React.FC = () => {
                             key={category.id}
                             variant="outline"
                             size="sm"
-                            className="border-white/30 text-white hover:bg-white/20"
                             onClick={() => startQuiz(category.id, 'speed')}
                           >
                             {category.icon} {category.name}
@@ -1760,7 +1743,7 @@ const AIQuizArena: React.FC = () => {
                     {/* Survival Mode */}
                     <motion.div
                       whileHover={{ scale: 1.02 }}
-                      className="border border-red-400/30 rounded-lg p-4"
+                      className="border border-red-200 dark:border-red-700 rounded-lg p-4 cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center space-x-3">
@@ -1768,11 +1751,10 @@ const AIQuizArena: React.FC = () => {
                             <Shield className="h-6 w-6 text-white" />
                           </div>
                           <div>
-                            <h3 className="font-bold text-lg">Survival Mode</h3>
-                            <p className="text-sm opacity-80">3 lives - how far can you go?</p>
+                            <h3 className="font-bold text-lg text-foreground">Survival Mode</h3>
+                            <p className="text-sm text-muted-foreground">3 lives - how far can you go?</p>
                           </div>
-                        </div>
-                        <Badge variant="outline" className="border-white/30 text-white">3 Lives</Badge>
+                        </div>                        <Badge variant="outline">3 Lives</Badge>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {categories.map(category => (
@@ -1780,7 +1762,6 @@ const AIQuizArena: React.FC = () => {
                             key={category.id}
                             variant="outline"
                             size="sm"
-                            className="border-white/30 text-white hover:bg-white/20"
                             onClick={() => startQuiz(category.id, 'survival')}
                           >
                             {category.icon} {category.name}
@@ -1792,7 +1773,7 @@ const AIQuizArena: React.FC = () => {
                     {/* Upload Content */}
                     <motion.div
                       whileHover={{ scale: 1.02 }}
-                      className="border border-green-400/30 rounded-lg p-4"
+                      className="border border-green-200 dark:border-green-700 rounded-lg p-4 cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center space-x-3">
@@ -1800,11 +1781,11 @@ const AIQuizArena: React.FC = () => {
                             <Upload className="h-6 w-6 text-white" />
                           </div>
                           <div>
-                            <h3 className="font-bold text-lg">Custom Content</h3>
-                            <p className="text-sm opacity-80">Upload your own materials</p>
+                            <h3 className="font-bold text-lg text-foreground">Custom Content</h3>
+                            <p className="text-sm text-muted-foreground">Upload your own materials</p>
                           </div>
                         </div>
-                        <Badge variant="outline" className="border-white/30 text-white">PDF/DOCX</Badge>
+                        <Badge variant="outline">PDF/DOCX</Badge>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {['classic', 'speed', 'survival'].map(mode => (
@@ -1812,7 +1793,7 @@ const AIQuizArena: React.FC = () => {
                             key={mode}
                             variant="outline"
                             size="sm"
-                            className="border-white/30 text-white hover:bg-white/20 capitalize"
+                            className="capitalize"
                             onClick={() => openDocumentUploader(mode)}
                           >
                             {mode} Mode
@@ -1831,11 +1812,10 @@ const AIQuizArena: React.FC = () => {
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-              >
-                <Card className="bg-white/10 backdrop-blur border-white/20 text-white">
+              >                <Card className="bg-card/90 backdrop-blur border shadow-lg">
                   <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Star className="h-5 w-5 mr-2 text-yellow-400" />
+                    <CardTitle className="flex items-center text-foreground">
+                      <Star className="h-5 w-5 mr-2 text-yellow-500" />
                       Power-ups
                     </CardTitle>
                   </CardHeader>
@@ -1843,16 +1823,16 @@ const AIQuizArena: React.FC = () => {
                     {powerUps.map(powerUp => (
                       <div
                         key={powerUp.id}
-                        className="flex items-center justify-between p-3 bg-white/5 rounded-lg"
+                        className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
                       >
                         <div className="flex items-center space-x-3">
                           <span className="text-2xl">{powerUp.icon}</span>
                           <div>
-                            <div className="font-medium">{powerUp.name}</div>
-                            <div className="text-xs opacity-80">{powerUp.description}</div>
+                            <div className="font-medium text-foreground">{powerUp.name}</div>
+                            <div className="text-xs text-muted-foreground">{powerUp.description}</div>
                           </div>
                         </div>
-                        <div className="text-yellow-400 font-bold">{powerUp.cost}</div>
+                        <div className="text-yellow-500 font-bold">{powerUp.cost}</div>
                       </div>
                     ))}
                   </CardContent>
@@ -1864,11 +1844,10 @@ const AIQuizArena: React.FC = () => {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 }}
-              >
-                <Card className="bg-white/10 backdrop-blur border-white/20 text-white">
+              >                <Card className="bg-card/90 backdrop-blur border shadow-lg">
                   <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Trophy className="h-5 w-5 mr-2 text-yellow-400" />
+                    <CardTitle className="flex items-center text-foreground">
+                      <Trophy className="h-5 w-5 mr-2 text-yellow-500" />
                       Recent Achievements
                     </CardTitle>
                   </CardHeader>
@@ -1878,14 +1857,14 @@ const AIQuizArena: React.FC = () => {
                         key={achievement.id}
                         className={`flex items-center space-x-3 p-3 rounded-lg ${
                           achievement.unlocked 
-                            ? 'bg-green-500/20 border border-green-400/30' 
-                            : 'bg-white/5'
+                            ? 'bg-green-100 dark:bg-green-900/20 border border-green-300 dark:border-green-700' 
+                            : 'bg-muted/30'
                         }`}
                       >
                         <span className="text-2xl">{achievement.icon}</span>
                         <div className="flex-1">
-                          <div className="font-medium">{achievement.name}</div>
-                          <div className="text-xs opacity-80">{achievement.description}</div>
+                          <div className="font-medium text-foreground">{achievement.name}</div>
+                          <div className="text-xs text-muted-foreground">{achievement.description}</div>
                           {!achievement.unlocked && (
                             <div className="mt-1">
                               <Progress 
@@ -1906,11 +1885,10 @@ const AIQuizArena: React.FC = () => {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2 }}
-              >
-                <Card className="bg-white/10 backdrop-blur border-white/20 text-white">
+              >                <Card className="bg-card/90 backdrop-blur border shadow-lg">
                   <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Medal className="h-5 w-5 mr-2 text-yellow-400" />
+                    <CardTitle className="flex items-center text-foreground">
+                      <Medal className="h-5 w-5 mr-2 text-yellow-500" />
                       Global Leaderboard
                     </CardTitle>
                   </CardHeader>
@@ -1918,15 +1896,15 @@ const AIQuizArena: React.FC = () => {
                     {leaderboard.slice(0, 5).map((entry, index) => (
                       <div
                         key={entry.rank}
-                        className="flex items-center justify-between p-2 bg-white/5 rounded"
+                        className="flex items-center justify-between p-2 bg-muted/30 rounded"
                       >
                         <div className="flex items-center space-x-3">
                           <div className="w-6 h-6 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-xs font-bold text-black">
                             {entry.rank}
                           </div>
-                          <span className="font-medium">{entry.username}</span>
+                          <span className="font-medium text-foreground">{entry.username}</span>
                         </div>
-                        <span className="text-yellow-400 font-bold">{entry.score}</span>
+                        <span className="text-yellow-500 font-bold">{entry.score}</span>
                       </div>
                     ))}
                   </CardContent>

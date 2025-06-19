@@ -88,14 +88,14 @@ const StudentFeedback = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
 
-  // Improved fetch with retry mechanism and timeout
+  // Improved fetch with retry mechanism and increased timeout
   const fetchWithRetry = useCallback(async (url: string, options: RequestInit, maxRetries = 3) => {
     const controller = new AbortController();
     setAbortController(controller);
 
     for (let i = 0; i < maxRetries; i++) {
       try {
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // Increased to 45s timeout
         const response = await fetch(url, {
           ...options,
           signal: controller.signal,
@@ -110,12 +110,14 @@ const StudentFeedback = () => {
         return { data, error: null };
       } catch (err: any) {
         if (err.name === 'AbortError') {
-          throw new Error('Request timed out');
+          console.error('Feedback forms request timed out after 45 seconds');
+          throw new Error('Connection timeout - The server is taking longer than expected. Please check your internet connection and try again.');
         }
         if (i === maxRetries - 1) {
           throw err;
         }
         // Exponential backoff
+        console.log(`Fetch attempt ${i + 1} failed, retrying in ${Math.pow(2, i)} seconds...`);
         await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
       }
     }
