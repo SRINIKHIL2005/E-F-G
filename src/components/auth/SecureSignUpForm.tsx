@@ -1,16 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Shield, Lock, AlertTriangle, CheckCircle, Mail, User, Phone     console.log('🆕 FRONTEND v3.0: ZERO VALIDATION, ZERO BARRIERS');
-    console.log('📝 Raw form data:', formData);
-    
-    // Generate unique email for testing
-    const timestamp = Date.now();
-    const uniqueEmail = formData.email || `test${timestamp}@test.com`;
-    
-      // Create the most basic registration data possible
-    const registrationData = {
-      name: formData.name || 'Test User',
-      email: uniqueEmail, 'lucide-react';
+import { Eye, EyeOff, Shield, Lock, AlertTriangle, CheckCircle, Mail, User, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
