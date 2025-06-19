@@ -51,6 +51,76 @@ router.post('/test-register', async (req, res) => {
   });
 });
 
+// QUICK REGISTER WITH UNIQUE EMAIL FOR TESTING
+router.post('/register-unique', [
+  apiLimiter,
+], async (req, res) => {
+  try {
+    console.log('🚀 UNIQUE REGISTRATION: Generating unique email for testing');
+    
+    // Generate unique email automatically
+    const timestamp = Date.now();
+    const uniqueEmail = `test${timestamp}@test.com`;
+    
+    const registrationData = {
+      name: req.body.name || 'Test User',
+      email: uniqueEmail,
+      password: req.body.password || 'Password123!',
+      role: 'student',
+      department: req.body.department || 'Computer Science',
+      phone: req.body.phone || '1234567890',
+      termsVersion: '1.0',
+      privacyVersion: '1.0',
+      termsOfServiceVersion: '1.0',
+      dataProcessingConsent: 'true',
+      marketingConsent: true
+    };
+    
+    console.log('📝 Creating user with unique email:', uniqueEmail);
+    
+    // Create new user
+    const user = new User({
+      name: registrationData.name,
+      email: registrationData.email,
+      password: registrationData.password,
+      role: registrationData.role,
+      department: registrationData.department,
+      phone: registrationData.phone
+    });
+    
+    await user.save();
+    
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: user._id, role: user.role, uid: user._id },
+      process.env.JWT_SECRET || 'your_jwt_secret',
+      { expiresIn: '30d' }
+    );
+    
+    res.status(201).json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        department: user.department,
+      },
+      message: 'Registration successful with unique email!',
+      generatedEmail: uniqueEmail
+    });
+    
+  } catch (error) {
+    console.error('❌ Unique registration error:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Error during unique registration',
+      error: error.message
+    });
+  }
+});
+
 // Register a new user with security and legal compliance
 router.post('/register', [
   apiLimiter,
@@ -96,15 +166,23 @@ router.post('/register', [
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      await SecurityLog.create({
-        action: 'registration_attempt_existing_email',
-        level: 'warning',
-        details: {
-          email,
-          ip: req.ip,
-          userAgent: req.get('User-Agent')
-        }
-      });
+      console.log('⚠️ User already exists with email:', email);
+      
+      // Try to log security event, but don't fail if this errors
+      try {
+        await SecurityLog.create({
+          action: 'registration_attempt_existing_email',
+          level: 'warning',
+          details: {
+            email,
+            ip: req.ip,
+            userAgent: req.get('User-Agent')
+          }
+        });
+      } catch (logError) {
+        console.error('❌ Could not log existing email attempt:', logError.message);
+      }
+      
       return res.status(400).json({ 
         success: false,
         message: 'User already exists with this email' 
@@ -147,18 +225,23 @@ router.post('/register', [
     );
 
     // Log successful registration
-    await SecurityLog.create({
-      userId: user._id,
-      action: 'user_registered',
-      level: 'info',
-      details: {
-        email,
-        role,
-        department,
-        ip: req.ip,
-        userAgent: req.get('User-Agent')
-      }
-    });
+    try {
+      await SecurityLog.create({
+        userId: user._id,
+        action: 'user_registered',
+        level: 'info',
+        details: {
+          email,
+          role,
+          department,
+          ip: req.ip,
+          userAgent: req.get('User-Agent')
+        }
+      });
+    } catch (logError) {
+      console.error('⚠️ Could not log successful registration:', logError.message);
+      // Don't fail the registration if logging fails
+    }
     
     res.status(201).json({
       success: true,
