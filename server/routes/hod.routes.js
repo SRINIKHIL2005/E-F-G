@@ -122,25 +122,20 @@ router.get('/analytics', authenticateJWT, async (req, res) => {
       allResponses: await FeedbackResponse.countDocuments({})
     };
     console.log('📊 Total records in database:', dbCounts);
-    
-    // In development mode, we'll get all data regardless of department
-    const isDev = process.env.NODE_ENV !== 'production';
-    
-    // Get counts from database - in dev mode get ALL records
-    const query = isDev ? {} : { department };
-    const totalStudents = await User.countDocuments({ role: 'student', ...query });
-    const totalTeachers = await User.countDocuments({ role: 'teacher', ...query });
-    const totalFeedbackForms = await FeedbackForm.countDocuments(query).catch(() => 0);
+      // HOD should see analytics for ALL users across all departments
+    const query = {};
+    const totalStudents = await User.countDocuments({ role: 'student' });
+    const totalTeachers = await User.countDocuments({ role: 'teacher' });
+    const totalFeedbackForms = await FeedbackForm.countDocuments({}).catch(() => 0);
     const totalFeedbacks = await FeedbackResponse.countDocuments().catch(() => 0);
     
     console.log(`📊 Found ${totalStudents} students and ${totalTeachers} teachers`);
     
     // Get monthly growth data from database instead of generating duplicates
     const monthlyData = [];
-    
-    // Query the database for real monthly data - extract creation dates
+      // Query the database for real monthly data - extract creation dates
     const studentsByMonth = await User.aggregate([
-      { $match: { role: 'student', ...query }},
+      { $match: { role: 'student' }},
       { $group: {
         _id: { $month: '$createdAt' },
         count: { $sum: 1 }
@@ -554,15 +549,11 @@ router.get('/students', authenticateJWT, async (req, res) => {
     // Debug: Check if any students exist in the database
     const allStudents = await User.find({ role: 'student' }).select('name email department');
     console.log(`📝 DEBUG: Found ${allStudents.length} total students in the database`);
-    
-    // Build query - more flexible for development
-    // In development mode, we'll get all students regardless of department
+      // Build query - HOD should see ALL students regardless of environment or department
     const query = { role: 'student' };
     
-    // In production, add department filter
-    if (process.env.NODE_ENV === 'production') {
-      query.department = department;
-    }
+    // HOD should see all students across all departments for management purposes
+    // Removed production environment filtering to ensure HOD can manage entire institution
     
     if (req.query.program && req.query.program !== 'all') {
       query.program = req.query.program;
@@ -1277,15 +1268,11 @@ router.get('/faculty', authenticateJWT, async (req, res) => {
     const allTeachers = await User.find({ role: 'teacher' }).select('name email department');
     console.log(`📝 DEBUG: Found ${allTeachers.length} total teachers in the database:`);
     console.log(JSON.stringify(allTeachers));
-    
-    // Build query - more flexible for development
-    // In development mode, we'll get all teachers regardless of department
+      // Build query - HOD should see ALL teachers regardless of environment or department
     const query = { role: 'teacher' };
     
-    // In production, add department filter
-    if (process.env.NODE_ENV === 'production') {
-      query.department = department;
-    }
+    // HOD should see all faculty across all departments for management purposes
+    // Removed production environment filtering to ensure HOD can manage entire institution
     
     if (req.query.specialization && req.query.specialization !== 'all') {
       query.specialization = req.query.specialization;
@@ -1592,13 +1579,11 @@ router.get('/dashboard-summary', authenticateJWT, async (req, res) => {
       }
     }
       console.log('🏫 Using department:', department);
-    
-    // In development mode, count ALL records for easier testing
-    // In production, we'll filter by department
-    const studentQuery = isDev ? { role: 'student' } : { role: 'student', department };
-    const teacherQuery = isDev ? { role: 'teacher' } : { role: 'teacher', department };
-    const courseQuery = isDev ? {} : { department };
-    const feedbackFormQuery = isDev ? {} : { department };
+      // HOD should see ALL records across all departments for institutional management
+    const studentQuery = { role: 'student' };
+    const teacherQuery = { role: 'teacher' };
+    const courseQuery = {};
+    const feedbackFormQuery = {};
     
     // Debug available data
     const dbSummary = {
@@ -1619,12 +1604,12 @@ router.get('/dashboard-summary', authenticateJWT, async (req, res) => {
     console.log(`📊 Found: ${totalStudents} students, ${totalTeachers} teachers, ${totalCourses} courses`);
     console.log(`📝 Found: ${totalFeedbackForms} feedback forms, ${totalFeedbacks} feedback responses`);
     console.log('🔍 Note: totalFeedbacks represents feedback responses/submissions, not forms');
-    
-    // Debug: Log the actual department being used and the counts
+      // Debug: Log the actual queries being used
     console.log(`🔍 Queries used:`);
-    console.log(`   Students: role='student'${isDev ? '' : `, department='${department}'`}`);
-    console.log(`   Teachers: role='teacher'${isDev ? '' : `, department='${department}'`}`);
-    console.log(`   Courses: ${isDev ? 'all courses' : `department='${department}'`}`);
+    console.log(`   Students: role='student' (all departments)`);
+    console.log(`   Teachers: role='teacher' (all departments)`);
+    console.log(`   Courses: all courses`);
+    console.log(`   FeedbackForms: all forms`);
       // Get actual sample data to verify what's in the database
     const sampleStudents = await User.find({ role: 'student' }).select('name email department');
     const sampleTeachers = await User.find({ role: 'teacher' }).select('name email department');
