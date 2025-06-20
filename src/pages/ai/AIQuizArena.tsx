@@ -184,12 +184,76 @@ const AIQuizArena: React.FC = () => {
     { id: 'python', name: 'Python Playground', icon: '🐍', color: 'from-green-500 to-blue-500' },
     { id: 'webdev', name: 'Web Development', icon: '🌐', color: 'from-pink-400 to-red-500' }
   ];
-
   // Helper function to get readable category name
   const getCategoryDisplayName = (categoryId: string) => {
     const category = categories.find(c => c.id === categoryId);
     return category ? category.name.toLowerCase() : categoryId.toLowerCase();
   };
+
+  // Helper function to calculate question points based on difficulty and mode
+  const calculateQuestionPoints = (difficulty: string, mode: string) => {
+    const basePoints = {
+      'Easy': 50,
+      'Medium': 100,
+      'Hard': 150,
+      'Expert': 200,
+      'Master': 250
+    };
+    
+    let points = basePoints[difficulty as keyof typeof basePoints] || 100;
+    
+    // Mode-specific multipliers
+    switch (mode) {
+      case 'speed':
+        points *= 1.2; // Bonus for speed mode
+        break;
+      case 'survival':
+        points *= 1.5; // Higher stakes for survival
+        break;
+      case 'multiplayer':
+        points *= 1.3; // Competitive bonus
+        break;
+      case 'classic':
+      default:
+        points *= 1.0; // Standard points
+        break;
+    }
+    
+    return Math.round(points);
+  };
+
+  // Helper function to calculate difficulty rating (1-10 scale like CodeChef/LeetCode)
+  const calculateDifficultyRating = (difficulty: string) => {
+    const ratings = {
+      'Easy': 2,
+      'Medium': 5,
+      'Hard': 7,
+      'Expert': 9,
+      'Master': 10
+    };
+    
+    return ratings[difficulty as keyof typeof ratings] || 5;
+  };
+  // Helper function to determine if player levels up based on XP
+  const checkLevelUp = (currentXP: number, currentLevel: number) => {
+    const xpNeededForLevel = (level: number) => level * 1000; // Progressive XP requirement
+    const xpForNextLevel = xpNeededForLevel(currentLevel);
+    
+    if (currentXP >= xpForNextLevel) {
+      return {
+        levelUp: true,
+        newLevel: currentLevel + 1,
+        xpToNextLevel: xpNeededForLevel(currentLevel + 1) - currentXP
+      };
+    }
+    
+    return {
+      levelUp: false,
+      newLevel: currentLevel,
+      xpToNextLevel: xpForNextLevel - currentXP
+    };
+  };
+
   // Multiplayer state
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -646,30 +710,67 @@ const AIQuizArena: React.FC = () => {
       
       console.log(`🎯 Starting ${mode.toUpperCase()} quiz for ${category}`);
       
+      // Dynamic difficulty based on player level and streak
+      const calculateDifficultyLevel = () => {
+        let baseDifficulty = 'medium';
+        
+        // Adjust based on player level
+        if (playerStats.level >= 15) {
+          baseDifficulty = 'expert';
+        } else if (playerStats.level >= 10) {
+          baseDifficulty = 'hard';
+        } else if (playerStats.level >= 5) {
+          baseDifficulty = 'medium';
+        } else {
+          baseDifficulty = 'easy';
+        }
+        
+        // Adjust based on current streak (adaptive difficulty)
+        if (playerStats.currentStreak >= 10) {
+          baseDifficulty = playerStats.level >= 10 ? 'master' : 'expert';
+        } else if (playerStats.currentStreak >= 5) {
+          baseDifficulty = playerStats.level >= 8 ? 'expert' : 'hard';
+        }
+        
+        // Mode-specific adjustments
+        switch (mode) {
+          case 'speed':
+            // Slightly easier for speed mode to maintain flow
+            if (baseDifficulty === 'expert') baseDifficulty = 'hard';
+            if (baseDifficulty === 'master') baseDifficulty = 'expert';
+            break;
+          case 'survival':
+            // Progressive difficulty for survival
+            baseDifficulty = 'progressive'; // Special mode for escalating difficulty
+            break;
+          case 'multiplayer':
+            // Balanced difficulty for fair competition
+            baseDifficulty = 'balanced';
+            break;
+        }
+        
+        return baseDifficulty;
+      };
+      
       // Mode-specific question counts and configurations
       let questionCount = 10;
-      let difficultyLevel = 'medium';
+      let difficultyLevel = calculateDifficultyLevel();
       
       switch (mode) {
         case 'speed':
           questionCount = 15; // More questions for speed mode
-          difficultyLevel = 'easy'; // Slightly easier for speed
           break;
         case 'survival':
           questionCount = 50; // Many questions for survival
-          difficultyLevel = 'hard'; // Harder for survival challenge
           break;
         case 'multiplayer':
           questionCount = 8; // Balanced for competition
-          difficultyLevel = 'medium';
           break;
         case 'classic':
           questionCount = 10; // Standard amount
-          difficultyLevel = 'medium';
           break;
         default:
           questionCount = 10;
-          difficultyLevel = 'medium';
       }
       
       const response = await fetch(`${API_BASE_URL}/api/ai/generate-quiz-arena`, {
@@ -720,16 +821,35 @@ const AIQuizArena: React.FC = () => {
         console.log('No questions passed validation. Raw questions:', questions);
         throw new Error('No valid questions found in response');
       }      // Add explanations and ensure proper structure for all questions
-      const processedQuestions = validQuestions.map(q => ({
+      const processedQuestions = validQuestions.map((q, index) => ({
         ...q,
         explanation: q.explanation && q.explanation.trim() !== '' 
           ? q.explanation 
           : `The correct answer is "${q.options[q.correctAnswer]}". This tests your knowledge of ${getCategoryDisplayName(category)} programming concepts.`,
-        points: q.points || 100,
-        timeLimit: q.timeLimit || (mode === 'speed' ? 15 : 30),
+        points: q.points || calculateQuestionPoints(q.difficulty || 'Medium', mode),
+        timeLimit: q.timeLimit || (mode === 'speed' ? 15 : mode === 'survival' ? 20 : 30),
         category: getCategoryDisplayName(category),
-        id: q.id || `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        id: q.id || `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        difficultyRating: q.difficultyRating || calculateDifficultyRating(q.difficulty || 'Medium'),
+        tags: q.tags || [category],
+        topicLevel: q.topicLevel || Math.min(Math.floor(playerStats.level / 3) + 1, 5)
       }));
+
+      // Filter out questions that were recently asked (last 50 questions)
+      const recentQuestions = Array.from(questionHistory).slice(-50);
+      const freshQuestions = processedQuestions.filter(q => !recentQuestions.includes(q.id));
+      
+      if (freshQuestions.length === 0) {
+        console.log('🔄 All questions were recent, using older questions but prioritizing less recent ones');
+        // If all questions are recent, use them but try to use the oldest ones first
+        freshQuestions.push(...processedQuestions.sort((a, b) => {
+          const aIndex = Array.from(questionHistory).indexOf(a.id);
+          const bIndex = Array.from(questionHistory).indexOf(b.id);
+          return aIndex - bIndex; // Earlier questions first
+        }));
+      }
+
+      const finalQuestions = freshQuestions.slice(0, questionCount);
 
       // Add questions to history to prevent future repeats
       const newQuestionIds = processedQuestions.map(q => q.id);
@@ -844,6 +964,12 @@ const AIQuizArena: React.FC = () => {
     if (isCorrect) {
       let points = question.points;
       
+      // Apply lightning mode bonus for fast answers
+      if (lightningMode && timeLeft > question.timeLimit * 0.7) {
+        points *= 1.5;
+        toast.success(`⚡ Lightning bonus! +${Math.round(points * 0.5)} extra points!`);
+      }
+      
       // Apply double points power-up
       if (activePowerUps.doublePoints) {
         points *= 2;
@@ -863,26 +989,49 @@ const AIQuizArena: React.FC = () => {
         streak: newStreak
       } : null);
       
-      if (!activePowerUps.doublePoints) {
+      // Check for level up based on score/XP
+      const levelUpResult = checkLevelUp(newScore, playerStats.level);
+      if (levelUpResult.levelUp) {
+        setPlayerStats(prev => ({
+          ...prev,
+          level: levelUpResult.newLevel,
+          xp: newScore
+        }));
+        toast.success(`🎉 Level Up! You're now level ${levelUpResult.newLevel}!`);
+        if (soundEnabled) {
+          playSound('level-up');
+        }
+      }
+      
+      if (!activePowerUps.doublePoints && !lightningMode) {
         toast.success(`+${points} points!`);
       }
     } else {
-      const newLives = currentSession.lives - 1;
-      setCurrentSession(prev => prev ? {
-        ...prev,
-        lives: newLives,
-        streak: 0
-      } : null);
-      
-      if (newLives <= 0 && currentSession.mode === 'survival') {
-        // Show explanation before ending quiz
-        setTimeout(() => {
-          setShowExplanation(true);
-        }, 1000);
-        setTimeout(() => {
-          endQuiz();
-        }, 5000); // Give more time to read explanation
-        return;
+      // Check if shield is active to protect from wrong answer
+      if (shieldActive) {
+        setShieldActive(false);
+        toast.success(`🛡️ Shield protected you from losing a life!`);
+        if (soundEnabled) {
+          playSound('shield');
+        }
+      } else {
+        const newLives = currentSession.lives - 1;
+        setCurrentSession(prev => prev ? {
+          ...prev,
+          lives: newLives,
+          streak: 0
+        } : null);
+        
+        if (newLives <= 0 && currentSession.mode === 'survival') {
+          // Show explanation before ending quiz
+          setTimeout(() => {
+            setShowExplanation(true);
+          }, 1000);
+          setTimeout(() => {
+            endQuiz();
+          }, 5000); // Give more time to read explanation
+          return;
+        }
       }
     }
 
@@ -1018,8 +1167,7 @@ const AIQuizArena: React.FC = () => {
             doublePoints: true
           }));
           toast.success('Double points for next question! 💎');
-          break;
-        case 'hint':
+          break;        case 'hint':
           if (currentSession && currentSession.questions.length > 0) {
             const currentQ = currentSession.questions[currentSession.currentQuestionIndex];
             if (currentQ) {
@@ -1034,6 +1182,35 @@ const AIQuizArena: React.FC = () => {
               };
               const hint = hints[currentQ.category as keyof typeof hints] || hints.general;
               toast.success(`💡 Hint: ${hint}`);
+            }
+          }
+          break;
+        case 'shield':
+          setShieldActive(true);
+          toast.success('🛡️ Answer Shield activated! Next wrong answer won\'t cost a life!');
+          break;
+        case 'lightning':
+          setLightningMode(true);
+          toast.success('⚡ Lightning Mode activated! Fast answers give bonus points!');
+          // Auto-disable after 5 questions
+          setTimeout(() => {
+            setLightningMode(false);
+            toast.success('Lightning Mode expired');
+          }, 30000); // 30 seconds or next few questions
+          break;
+        case 'wisdom':
+          if (currentSession && currentSession.questions.length > 0) {
+            const currentQ = currentSession.questions[currentSession.currentQuestionIndex];
+            if (currentQ) {
+              const difficultyColors = {
+                'Easy': 'text-green-400',
+                'Medium': 'text-yellow-400',
+                'Hard': 'text-orange-400',
+                'Expert': 'text-red-400',
+                'Master': 'text-purple-400'
+              };
+              const colorClass = difficultyColors[currentQ.difficulty as keyof typeof difficultyColors] || 'text-blue-400';
+              toast.success(`🔮 Wisdom reveals: ${currentQ.difficulty} difficulty (${currentQ.difficultyRating}/10) in ${currentQ.category}`);
             }
           }
           break;
@@ -1092,14 +1269,27 @@ const AIQuizArena: React.FC = () => {
     if (soundEnabled) {
       playSound('game-end');
     }
-  };
-  const playSound = (type: string) => {
+  };  const playSound = (type: string) => {
     if (!soundEnabled) return;
     
     try {
       // Create audio context and play sound
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const frequency = type === 'correct' ? 800 : type === 'wrong' ? 400 : type === 'game-start' ? 600 : 500;
+      
+      // Define frequencies for different sound types
+      const soundMap = {
+        'correct': 800,
+        'wrong': 400,
+        'game-start': 600,
+        'game-end': 300,
+        'powerup': 1000,
+        'level-up': 1200,
+        'shield': 700,
+        'lightning': 1500,
+        'achievement': 900
+      };
+      
+      const frequency = soundMap[type as keyof typeof soundMap] || 500;
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       
@@ -1107,14 +1297,26 @@ const AIQuizArena: React.FC = () => {
       gainNode.connect(audioContext.destination);
       
       oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-      oscillator.type = 'sine';
+      oscillator.type = type === 'level-up' ? 'square' : type === 'lightning' ? 'sawtooth' : 'sine';
       
       gainNode.gain.setValueAtTime(0, audioContext.currentTime);
       gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      // Special effects for different sounds
+      if (type === 'level-up' || type === 'achievement') {
+        // Play a pleasant ascending sound for level up
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+        oscillator.stop(audioContext.currentTime + 0.8);
+      } else if (type === 'lightning') {
+        // Quick burst for lightning
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+        oscillator.stop(audioContext.currentTime + 0.2);
+      } else {
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+        oscillator.stop(audioContext.currentTime + 0.3);
+      }
       
       oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.3);
       
       console.log(`🔊 Playing sound: ${type}`);
     } catch (error) {
@@ -1269,7 +1471,9 @@ const AIQuizArena: React.FC = () => {
     });
 
     toast.success('Left multiplayer queue');
-  };  // Handle multiplayer answer submission
+  };
+
+  // Handle multiplayer answer submission
   const handleMultiplayerAnswerSelect = (answerIndex: number) => {
     if (selectedAnswer !== null || !currentSession || !socket || !multiplayerState.roomId) return;
     
@@ -1292,6 +1496,12 @@ const AIQuizArena: React.FC = () => {
     if (isCorrect) {
       let points = question.points;
       
+      // Apply lightning mode bonus for fast answers (same as single player)
+      if (lightningMode && timeLeft > question.timeLimit * 0.7) {
+        points *= 1.5;
+        toast.success(`⚡ Lightning bonus! +${Math.round(points * 0.5)} extra points!`);
+      }
+      
       // Apply double points power-up
       if (activePowerUps.doublePoints) {
         points *= 2;
@@ -1311,14 +1521,37 @@ const AIQuizArena: React.FC = () => {
         streak: newStreak
       } : null);
       
-      if (!activePowerUps.doublePoints) {
+      // Check for level up in multiplayer too
+      const levelUpResult = checkLevelUp(newScore, playerStats.level);
+      if (levelUpResult.levelUp) {
+        setPlayerStats(prev => ({
+          ...prev,
+          level: levelUpResult.newLevel,
+          xp: newScore
+        }));
+        toast.success(`🎉 Level Up! You're now level ${levelUpResult.newLevel}!`);
+        if (soundEnabled) {
+          playSound('level-up');
+        }
+      }
+      
+      if (!activePowerUps.doublePoints && !lightningMode) {
         toast.success(`+${points} points!`);
       }
     } else {
-      setCurrentSession(prev => prev ? {
-        ...prev,
-        streak: 0
-      } : null);
+      // Check if shield is active to protect from wrong answer in multiplayer
+      if (shieldActive) {
+        setShieldActive(false);
+        toast.success(`🛡️ Shield protected you from penalty!`);
+        if (soundEnabled) {
+          playSound('shield');
+        }
+      } else {
+        setCurrentSession(prev => prev ? {
+          ...prev,
+          streak: 0
+        } : null);
+      }
     }
 
     // Show explanation immediately for multiplayer with fallback
