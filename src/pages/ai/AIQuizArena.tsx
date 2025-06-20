@@ -95,10 +95,13 @@ interface LeaderboardEntry {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 const AIQuizArena: React.FC = () => {
-  const { user, token } = useAuth();  // Quiz state management  
+  const { user, token } = useAuth();
+  
+  // Quiz state management
   const [gameMode, setGameMode] = useState<'menu' | 'playing' | 'results'>('menu');
   const [currentSession, setCurrentSession] = useState<QuizSession | null>(null);
-  const [timeLeft, setTimeLeft] = useState(0);  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [powerUps, setPowerUps] = useState<PowerUp[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
@@ -124,8 +127,10 @@ const AIQuizArena: React.FC = () => {
     usedFiftyFiftyQuestions: Set<string>;
   }>({
     doublePoints: false,
-    fiftyFifty: false,    usedFiftyFiftyQuestions: new Set()
+    fiftyFifty: false,
+    usedFiftyFiftyQuestions: new Set()
   });
+
   const [playerStats, setPlayerStats] = useState({
     level: 1,
     xp: 0,
@@ -135,6 +140,7 @@ const AIQuizArena: React.FC = () => {
     currentStreak: 0,
     bestStreak: 0
   });
+
   // Multiplayer state
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -201,6 +207,55 @@ const AIQuizArena: React.FC = () => {
     }
   ];
 
+  // Sound system with actual audio feedback
+  const playSound = useCallback((type: string) => {
+    if (!soundEnabled) return;
+    
+    try {
+      // Create audio context for better browser compatibility
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Define sound frequencies and durations for different types
+      const soundMap: { [key: string]: { frequency: number; duration: number; type: OscillatorType } } = {
+        'correct': { frequency: 800, duration: 0.3, type: 'sine' },
+        'wrong': { frequency: 300, duration: 0.5, type: 'sawtooth' },
+        'game-start': { frequency: 440, duration: 0.2, type: 'square' },
+        'game-end': { frequency: 330, duration: 0.8, type: 'sine' },
+        'power-up': { frequency: 1000, duration: 0.15, type: 'sine' },
+        'tick': { frequency: 600, duration: 0.1, type: 'square' },
+        'countdown': { frequency: 500, duration: 0.2, type: 'triangle' }
+      };
+      
+      const sound = soundMap[type] || soundMap['tick'];
+      
+      // Create oscillator and gain node
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      // Connect nodes
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Configure sound
+      oscillator.frequency.setValueAtTime(sound.frequency, audioContext.currentTime);
+      oscillator.type = sound.type;
+      
+      // Configure volume envelope
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + sound.duration);
+      
+      // Play sound
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + sound.duration);
+      
+    } catch (error) {
+      // Fallback: just log if audio context fails
+      console.log(`Playing sound: ${type}`);
+    }
+  }, [soundEnabled]);
+
+  // Initialize component
   useEffect(() => {
     initializePowerUps();
     loadAchievements();
@@ -208,6 +263,7 @@ const AIQuizArena: React.FC = () => {
     loadPlayerStats();
   }, []);
 
+  // Timer management
   useEffect(() => {
     let interval: number;
     if (currentSession && timeLeft > 0 && gameMode === 'playing') {
@@ -224,6 +280,7 @@ const AIQuizArena: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentSession, timeLeft, gameMode]);
 
+  // Socket connection for multiplayer
   useEffect(() => {
     const socketIo = io(API_BASE_URL, {
       transports: ['websocket'],
@@ -253,6 +310,180 @@ const AIQuizArena: React.FC = () => {
       socketIo.disconnect();
     };
   }, [token]);
+
+  // Socket event handlers for multiplayer
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on('room_data', (data: any) => {
+      setConnectedUsers(data.connectedUsers);
+      setMultiplayerData(data);
+    });
+
+    socket.on('quiz_started', (data: any) => {
+      const { questions, mode } = data;
+      const session: QuizSession = {
+        id: Date.now().toString(),
+        mode: mode as any,
+        category: 'Multiplayer',
+        difficulty: 'adaptive',
+        questions: questions,
+        currentQuestionIndex: 0,
+        score: 0,
+        lives: mode === 'survival' ? 3 : 1,
+        timeRemaining: 0,
+        streak: 0,
+        powerUps: [],
+        startTime: new Date()
+      };
+      setCurrentSession(session);
+      setTimeLeft(session.questions[0]?.timeLimit || 30);
+      setGameMode('playing');
+      setSelectedAnswer(null);
+      setShowExplanation(false);
+      
+      // Reset active power-ups for new quiz
+      setActivePowerUps({
+        doublePoints: false,
+        fiftyFifty: false,
+        usedFiftyFiftyQuestions: new Set()
+      });
+      
+      if (soundEnabled) {
+        playSound('game-start');
+      }
+    });
+
+    socket.on('quiz_ended', (data: any) => {
+      const { scores } = data;
+      setGameMode('results');
+      setLeaderboard(scores);
+      
+      if (soundEnabled) {
+        playSound('game-end');
+      }
+    });
+
+    socket.on('queue-status', (data: any) => {
+      setMultiplayerState(prev => ({
+        ...prev,
+        inQueue: data.inQueue,
+        queuePosition: data.position
+      }));
+    });
+
+    socket.on('game-found', (data: any) => {
+      setMultiplayerState(prev => ({
+        ...prev,
+        gameFound: true,
+        inQueue: false,
+        roomId: data.roomId,
+        opponent: data.opponent
+      }));
+      
+      toast.success('Game found! Starting in 3 seconds...');
+      
+      setTimeout(() => {
+        const session: QuizSession = {
+          id: Date.now().toString(),
+          mode: 'multiplayer',
+          category: data.category || 'General',
+          difficulty: 'adaptive',
+          questions: data.questions,
+          currentQuestionIndex: 0,
+          score: 0,
+          lives: 1,
+          timeRemaining: 0,
+          streak: 0,
+          powerUps: [],
+          startTime: new Date()
+        };
+        setCurrentSession(session);
+        setTimeLeft(session.questions[0]?.timeLimit || 30);
+        setGameMode('playing');
+        setSelectedAnswer(null);
+        setShowExplanation(false);
+      }, 3000);
+    });
+
+    socket.on('question-results', (data: any) => {
+      const { results } = data;
+      const myResult = results.find((r: any) => r.playerId === user?.id);
+      const opponentResult = results.find((r: any) => r.playerId !== user?.id);
+      
+      // Update current session score
+      if (myResult && currentSession) {
+        setCurrentSession(prev => prev ? {
+          ...prev,
+          score: myResult.totalScore
+        } : null);
+      }
+      
+      // Update multiplayer state with results
+      setMultiplayerState(prev => ({
+        ...prev,
+        opponentScore: opponentResult?.totalScore || 0,
+        lastQuestionResult: {
+          myAnswer: myResult?.selectedAnswer,
+          opponentAnswer: opponentResult?.selectedAnswer,
+          correctAnswer: data.correctAnswer
+        }
+      }));
+      
+      // Show explanation after a delay
+      setTimeout(() => {
+        setShowExplanation(true);
+      }, 1500);
+    });
+
+    socket.on('next-question', (data: any) => {
+      if (currentSession) {
+        setCurrentSession(prev => prev ? {
+          ...prev,
+          currentQuestionIndex: prev.currentQuestionIndex + 1
+        } : null);
+        setSelectedAnswer(null);
+        setShowExplanation(false);
+        setTimeLeft(data.timeLimit || 30);
+        
+        setMultiplayerState(prev => ({
+          ...prev,
+          opponentAnswered: false,
+          lastQuestionResult: null
+        }));
+      }
+    });
+
+    socket.on('game-finished', (data: any) => {
+      setGameMode('results');
+      setLeaderboard(data.finalScores);
+      
+      if (soundEnabled) {
+        playSound('game-end');
+      }
+      
+      setMultiplayerState({
+        inQueue: false,
+        gameFound: false,
+        roomId: null,
+        opponent: null,
+        gameStarted: false,
+        opponentScore: 0,
+        opponentAnswered: false
+      });
+    });
+
+    return () => {
+      socket.off('room_data');
+      socket.off('quiz_started');
+      socket.off('quiz_ended');
+      socket.off('queue-status');
+      socket.off('game-found');
+      socket.off('question-results');
+      socket.off('next-question');
+      socket.off('game-finished');
+    };
+  }, [socket, soundEnabled, currentSession, user, playSound]);
 
   const initializePowerUps = () => {
     setPowerUps([
@@ -303,6 +534,7 @@ const AIQuizArena: React.FC = () => {
       }
     ]);
   };
+
   const loadAchievements = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/user/learning-stats`, {
@@ -312,96 +544,58 @@ const AIQuizArena: React.FC = () => {
           'Content-Type': 'application/json',
         },
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        const quizStats = data.quizStats || {};
-        
-        // Define achievement definitions that match the backend
-        const achievementDefinitions = [
-          { id: 'first_quiz', name: 'First Steps', description: 'Complete your first quiz', icon: '🎯', rarity: 'Common' as const },
-          { id: 'quiz_master', name: 'Quiz Master', description: 'Complete 50 quizzes', icon: '👑', rarity: 'Legendary' as const },
-          { id: 'streak_5', name: 'Streak Starter', description: 'Achieve a 5-question streak', icon: '🔥', rarity: 'Common' as const },
-          { id: 'streak_25', name: 'Streak Master', description: 'Achieve a 25-question streak', icon: '⚡', rarity: 'Epic' as const },
-          { id: 'level_5', name: 'Rising Star', description: 'Reach level 5', icon: '⭐', rarity: 'Rare' as const },
-          { id: 'level_10', name: 'Expert Player', description: 'Reach level 10', icon: '💎', rarity: 'Epic' as const },
-          { id: 'coins_500', name: 'Coin Collector', description: 'Collect 500 coins', icon: '🪙', rarity: 'Rare' as const },
-          { id: 'accuracy_90', name: 'Precision Master', description: 'Achieve 90% accuracy', icon: '🎯', rarity: 'Epic' as const }
-        ];
-        
-        // Convert user achievements to achievement objects with progress
-        const userAchievements = quizStats.achievements || [];
-        const achievementObjects = achievementDefinitions.map(def => {
-          const userAchievement = userAchievements.find((a: any) => a.achievementId === def.id);
-          let progress = 0;
-          let maxProgress = 1;
-          let unlocked = !!userAchievement;
-          
-          // Calculate progress for non-unlocked achievements
-          if (!unlocked) {
-            switch (def.id) {
-              case 'first_quiz':
-                progress = Math.min(quizStats.totalQuizzes || 0, 1);
-                maxProgress = 1;
-                break;
-              case 'quiz_master':
-                progress = Math.min(quizStats.totalQuizzes || 0, 50);
-                maxProgress = 50;
-                break;
-              case 'streak_5':
-                progress = Math.min(quizStats.bestStreak || 0, 5);
-                maxProgress = 5;
-                break;
-              case 'streak_25':
-                progress = Math.min(quizStats.bestStreak || 0, 25);
-                maxProgress = 25;
-                break;
-              case 'level_5':
-                progress = Math.min(quizStats.level || 1, 5);
-                maxProgress = 5;
-                break;
-              case 'level_10':
-                progress = Math.min(quizStats.level || 1, 10);
-                maxProgress = 10;
-                break;
-              case 'coins_500':
-                progress = Math.min(quizStats.coins || 0, 500);
-                maxProgress = 500;
-                break;
-              case 'accuracy_90':
-                const accuracy = (quizStats.totalQuizzes || 0) > 0 
-                  ? Math.round(((quizStats.correctAnswers || 0) / ((quizStats.totalQuizzes || 1) * 10)) * 100)
-                  : 0;
-                progress = Math.min(accuracy, 90);
-                maxProgress = 90;
-                break;
-            }
+        const mockAchievements: Achievement[] = [
+          {
+            id: '1',
+            name: 'First Victory',
+            description: 'Complete your first quiz',
+            icon: '🏆',
+            rarity: 'Common',
+            unlocked: data.quizStats?.totalQuizzes > 0,
+            progress: Math.min(data.quizStats?.totalQuizzes || 0, 1),
+            maxProgress: 1
+          },
+          {
+            id: '2',
+            name: 'Speed Demon',
+            description: 'Complete a Lightning Round',
+            icon: '⚡',
+            rarity: 'Rare',
+            unlocked: false,
+            progress: 0,
+            maxProgress: 1
+          },
+          {
+            id: '3',
+            name: 'Survival Master',
+            description: 'Score 100+ in Survival Mode',
+            icon: '🛡️',
+            rarity: 'Epic',
+            unlocked: false,
+            progress: 0,
+            maxProgress: 100
+          },
+          {
+            id: '4',
+            name: 'Arena Champion',
+            description: 'Win 10 multiplayer battles',
+            icon: '👑',
+            rarity: 'Legendary',
+            unlocked: false,
+            progress: 0,
+            maxProgress: 10
           }
-          
-          return {
-            id: def.id,
-            name: def.name,
-            description: def.description,
-            icon: def.icon,
-            rarity: def.rarity,
-            unlocked,
-            progress: unlocked ? maxProgress : progress,
-            maxProgress
-          };
-        });
-        
-        setAchievements(achievementObjects);
-      } else {
-        console.error('Failed to fetch user achievements');
-        // Fallback to empty achievements
-        setAchievements([]);
+        ];
+        setAchievements(mockAchievements);
       }
     } catch (error) {
-      console.error('Error loading achievements:', error);
-      // Fallback to empty achievements  
-      setAchievements([]);
+      console.error('Failed to fetch user achievements');
     }
   };
+
   const loadLeaderboard = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/quiz/leaderboard`, {
@@ -411,28 +605,16 @@ const AIQuizArena: React.FC = () => {
           'Content-Type': 'application/json',
         },
       });
-      
+
       if (response.ok) {
-        const leaderboardData = await response.json();
-        setLeaderboard(leaderboardData.map((entry: any) => ({
-          rank: entry.rank,
-          username: entry.username,
-          score: entry.score,
-          category: entry.category,
-          completedAt: new Date(entry.completedAt),
-          avatar: entry.avatar
-        })));
-      } else {
-        console.error('Failed to fetch leaderboard');
-        // Fallback to empty leaderboard
-        setLeaderboard([]);
+        const data = await response.json();
+        setLeaderboard(data.leaderboard || []);
       }
     } catch (error) {
-      console.error('Error loading leaderboard:', error);
-      // Fallback to empty leaderboard
-      setLeaderboard([]);
+      console.error('Failed to fetch leaderboard');
     }
   };
+
   const loadPlayerStats = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/user/learning-stats`, {
@@ -442,7 +624,7 @@ const AIQuizArena: React.FC = () => {
           'Content-Type': 'application/json',
         },
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         const quizStats = data.quizStats || {};
@@ -455,22 +637,9 @@ const AIQuizArena: React.FC = () => {
           currentStreak: quizStats.currentStreak || 0,
           bestStreak: quizStats.bestStreak || 0
         });
-      } else {
-        console.error('Failed to fetch user quiz stats');
-        // Fallback to default values
-        setPlayerStats({
-          level: 1,
-          xp: 0,
-          coins: 100,
-          totalQuizzes: 0,
-          correctAnswers: 0,
-          currentStreak: 0,
-          bestStreak: 0
-        });
       }
     } catch (error) {
-      console.error('Error loading player stats:', error);
-      // Fallback to default values
+      console.error('Failed to fetch user quiz stats');
       setPlayerStats({
         level: 1,
         xp: 0,
@@ -481,7 +650,9 @@ const AIQuizArena: React.FC = () => {
         bestStreak: 0
       });
     }
-  };  const startQuiz = async (category: string, mode: string) => {
+  };
+
+  const startQuiz = async (category: string, mode: string) => {
     try {
       // Show loading state
       toast.loading('🎯 Generating adaptive questions...', { id: 'quiz-loading' });
@@ -511,7 +682,8 @@ const AIQuizArena: React.FC = () => {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-        },        body: JSON.stringify({
+        },
+        body: JSON.stringify({
           subject: category,
           gameMode: mode,
           difficulty: 'adaptive', // Use adaptive difficulty based on user level
@@ -529,20 +701,31 @@ const AIQuizArena: React.FC = () => {
         const errorData = await response.text();
         console.error('Quiz Arena API Error:', response.status, errorData);
         throw new Error(`Failed to generate quiz: ${response.status}`);
-      }      const quizData = await response.json();
+      }
+
+      const quizData = await response.json();
       
       // Extract questions from the correct path in API response
       const questions = quizData.quiz?.questions || quizData.questions;
       
       if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        throw new Error('No valid questions received from API');      }
+        throw new Error('No valid questions received from API');
+      }
+
+      // Ensure all questions have explanations
+      const questionsWithExplanations = questions.map((q: any, index: number) => ({
+        ...q,
+        explanation: q.explanation || `The correct answer is option ${q.correctAnswer + 1}. This question tests your understanding of ${category}.`,
+        id: q.id || `q_${Date.now()}_${index}`,
+        timeLimit: q.timeLimit || (mode === 'speed' ? 30 : 60)
+      }));
       
       const session: QuizSession = {
         id: Date.now().toString(),
         mode: mode as any,
         category,
         difficulty: 'adaptive',
-        questions: questions,
+        questions: questionsWithExplanations,
         currentQuestionIndex: 0,
         score: 0,
         lives: mode === 'survival' ? 3 : 1, // Ensure survival mode always gets exactly 3 lives
@@ -550,16 +733,16 @@ const AIQuizArena: React.FC = () => {
         streak: 0,
         powerUps: [],
         startTime: new Date()
-      };      setCurrentSession(session);
-      setTimeLeft(session.questions[0]?.timeLimit || 30);
+      };
+      
+      setCurrentSession(session);
+      setTimeLeft(questionsWithExplanations[0]?.timeLimit || 30);
       setGameMode('playing');
       setSelectedAnswer(null);
       setShowExplanation(false);
+      setQuestionAnswers([]); // Clear previous question tracking
       
-      // Reset tracking for new quiz
-      setQuestionAnswers([]);
-      
-      // Reset active power-ups for new quiz
+      // Reset power-ups
       setActivePowerUps({
         doublePoints: false,
         fiftyFifty: false,
@@ -570,61 +753,14 @@ const AIQuizArena: React.FC = () => {
         playSound('game-start');
       }
       
-      const adaptiveInfo = quizData.quiz?.adaptiveDifficulty || 'medium';
-      toast.success(`🎯 Generated ${questions.length} ${adaptiveInfo} questions for ${mode} mode!`);
+      toast.success(`🎮 ${mode.toUpperCase()} mode started! Good luck!`);
     } catch (error) {
-      console.error('Quiz generation error:', error);
-      toast.dismiss('quiz-loading');
-      toast.error('Failed to generate quiz. Please try again or upload a document.');
-      return; // Don't create a session with mock data
-    }  };
-  const handleQuizFromFiles = (quiz: any) => {
-    if (!quiz || !quiz.questions || quiz.questions.length === 0) {
-      toast.error('No valid questions generated from files');
-      return;
-    }    const session: QuizSession = {
-      id: Date.now().toString(),
-      mode: selectedGameMode as any,
-      category: 'Uploaded Content',
-      difficulty: 'adaptive',
-      questions: quiz.questions,
-      currentQuestionIndex: 0,
-      score: 0,
-      lives: selectedGameMode === 'survival' ? 3 : 1, // Ensure survival mode always gets exactly 3 lives
-      timeRemaining: 0,
-      streak: 0,
-      powerUps: [],
-      startTime: new Date()
-    };
-
-    setCurrentSession(session);
-    setTimeLeft(session.questions[0]?.timeLimit || 30);
-    setGameMode('playing');
-    setSelectedAnswer(null);
-    setShowExplanation(false);
-    setShowDocumentUploader(false);
-    
-    // Reset tracking for new quiz
-    setQuestionAnswers([]);
-    
-    // Reset power-ups
-    setActivePowerUps({
-      doublePoints: false,
-      fiftyFifty: false,
-      usedFiftyFiftyQuestions: new Set()
-    });
-    
-    if (soundEnabled) {
-      playSound('game-start');
+      console.error('Error starting quiz:', error);
+      toast.error('Failed to start quiz. Please try again.');
     }
-
-    toast.success(`Generated ${quiz.questions.length} questions from your files!`);
   };
 
-  const openDocumentUploader = (mode: string) => {
-    setSelectedGameMode(mode);
-    setShowDocumentUploader(true);
-  };  const handleAnswerSelect = (answerIndex: number) => {
+  const handleAnswerSelect = (answerIndex: number) => {
     if (selectedAnswer !== null || !currentSession) return;
     
     // Route to multiplayer handler if in multiplayer mode
@@ -678,7 +814,8 @@ const AIQuizArena: React.FC = () => {
       
       if (!activePowerUps.doublePoints) {
         toast.success(`+${points} points!`);
-      }    } else {
+      }
+    } else {
       // Wrong answer - deduct life in survival mode
       if (currentSession.mode === 'survival') {
         const newLives = Math.max(0, currentSession.lives - 1);
@@ -709,12 +846,85 @@ const AIQuizArena: React.FC = () => {
     // Show explanation immediately for better learning experience
     setTimeout(() => {
       setShowExplanation(true);
-    }, 500);
+    }, 1000);
 
     // Proceed to next question after showing explanation
     setTimeout(() => {
       nextQuestion();
     }, 4000); // Increased time to allow better explanation reading
+  };
+
+  const handleMultiplayerAnswerSelect = (answerIndex: number) => {
+    if (selectedAnswer !== null || !currentSession || !socket || !multiplayerState.roomId) return;
+    
+    setSelectedAnswer(answerIndex);
+    const question = currentSession.questions[currentSession.currentQuestionIndex];
+    const isCorrect = answerIndex === question.correctAnswer;
+    
+    // Record the question answer for tracking (same as single player)
+    const questionAnswer = {
+      questionId: question.id,
+      question: question.question,
+      category: question.category || currentSession.category,
+      difficulty: question.difficulty || 'medium',
+      wasCorrect: isCorrect,
+      userAnswer: answerIndex,
+      correctAnswer: question.correctAnswer
+    };
+    
+    setQuestionAnswers(prev => [...prev, questionAnswer]);
+    
+    if (soundEnabled) {
+      playSound(isCorrect ? 'correct' : 'wrong');
+    }
+
+    // Submit answer to server
+    socket.emit('submit-answer', {
+      roomId: multiplayerState.roomId,
+      questionIndex: currentSession.currentQuestionIndex,
+      selectedAnswer: answerIndex,
+      timeRemaining: timeLeft
+    });
+
+    if (isCorrect) {
+      let points = question.points;
+      
+      // Apply double points power-up
+      if (activePowerUps.doublePoints) {
+        points *= 2;
+        setActivePowerUps(prev => ({
+          ...prev,
+          doublePoints: false
+        }));
+        toast.success(`Double points applied! +${points} points! 💎`);
+      }
+      
+      const newScore = currentSession.score + points;
+      const newStreak = currentSession.streak + 1;
+      
+      setCurrentSession(prev => prev ? {
+        ...prev,
+        score: newScore,
+        streak: newStreak
+      } : null);
+      
+      if (!activePowerUps.doublePoints) {
+        toast.success(`+${points} points!`);
+      }
+    } else {
+      // Wrong answer in multiplayer - just reset streak
+      setCurrentSession(prev => prev ? {
+        ...prev,
+        streak: 0
+      } : null);
+      
+      toast.error('Wrong answer!');
+    }
+
+    // Show explanation immediately for better learning experience in multiplayer
+    setTimeout(() => {
+      setShowExplanation(true);
+    }, 1500);
   };
 
   const nextQuestion = () => {
@@ -735,7 +945,9 @@ const AIQuizArena: React.FC = () => {
     setSelectedAnswer(null);
     setShowExplanation(false);
     setTimeLeft(currentSession.questions[nextIndex].timeLimit);
-  };  const handleTimeout = () => {
+  };
+
+  const handleTimeout = () => {
     if (!currentSession) return;
     
     const question = currentSession.questions[currentSession.currentQuestionIndex];
@@ -774,125 +986,26 @@ const AIQuizArena: React.FC = () => {
         streak: 0
       } : null);
       
-      toast.error('Time\'s up!');
+      toast.error("Time's up!");
     }
 
-    // Show explanation briefly even on timeout
+    // Show explanation for timed out question
     setTimeout(() => {
       setShowExplanation(true);
     }, 500);
 
     setTimeout(() => {
       nextQuestion();
-    }, 2500);
-  };
-  const updateUserCoins = async (newCoinBalance: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user/learning-stats`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          quizStats: {
-            coins: newCoinBalance
-          }
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to update coins');
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Error updating coins:', error);
-      throw error;
-    }
+    }, 3000);
   };
 
-  const usePowerUp = async (powerUpId: string) => {
-    const powerUp = powerUps.find(p => p.id === powerUpId);
-    if (!powerUp || !powerUp.available || playerStats.coins < powerUp.cost) {
-      toast.error('Cannot use this power-up');
-      return;
+  const endQuiz = () => {
+    if (currentSession) {
+      recordQuizCompletion(currentSession);
     }
-
-    try {
-      const newCoinBalance = playerStats.coins - powerUp.cost;
-      
-      // Update coins in backend first
-      await updateUserCoins(newCoinBalance);
-      
-      // Update local state
-      setPlayerStats(prev => ({
-        ...prev,
-        coins: newCoinBalance
-      }));      // Apply power-up effects
-      switch (powerUp.type) {
-        case 'time_freeze':
-          setTimeLeft(prev => prev + 10);
-          toast.success('Time frozen for 10 seconds! ❄️');
-          break;
-        case 'fifty_fifty':
-          if (currentSession && currentSession.questions.length > 0) {
-            const currentQ = currentSession.questions[currentSession.currentQuestionIndex];
-            if (currentQ && !activePowerUps.usedFiftyFiftyQuestions.has(currentQ.id)) {
-              setActivePowerUps(prev => ({
-                ...prev,
-                fiftyFifty: true,
-                usedFiftyFiftyQuestions: new Set([...prev.usedFiftyFiftyQuestions, currentQ.id])
-              }));
-              toast.success('2 wrong answers removed! ✂️');
-            } else {
-              toast.error('50/50 already used on this question!');
-              return; // Don't consume the power-up
-            }
-          }
-          break;
-        case 'extra_life':
-          if (currentSession) {
-            setCurrentSession(prev => prev ? {
-              ...prev,
-              lives: prev.lives + 1
-            } : null);
-          }
-          toast.success('Extra life gained! ❤️');
-          break;
-        case 'double_points':
-          setActivePowerUps(prev => ({
-            ...prev,
-            doublePoints: true
-          }));
-          toast.success('Double points for next question! 💎');
-          break;
-        case 'hint':
-          if (currentSession && currentSession.questions.length > 0) {
-            const currentQ = currentSession.questions[currentSession.currentQuestionIndex];
-            if (currentQ) {
-              // Generate a smart hint based on the question category
-              const hints = {
-                'javascript': 'Think about JavaScript syntax and built-in methods',
-                'react': 'Consider component lifecycle and state management',
-                'algorithms': 'Focus on time complexity and data structures',
-                'python': 'Remember Python-specific features and libraries',
-                'databases': 'Think about SQL operations and database design',
-                'general': 'Look for keywords that indicate the correct approach'
-              };
-              const hint = hints[currentQ.category as keyof typeof hints] || hints.general;
-              toast.success(`💡 Hint: ${hint}`);
-            }
-          }
-          break;
-      }
-
-      if (soundEnabled) {
-        playSound('powerup');
-      }
-    } catch (error) {
-      toast.error('Failed to use power-up. Please try again.');
-      console.error('Error using power-up:', error);
+    setGameMode('results');
+    if (soundEnabled) {
+      playSound('game-end');
     }
   };
 
@@ -939,20 +1052,6 @@ const AIQuizArena: React.FC = () => {
     }
   };
 
-  const endQuiz = () => {
-    if (currentSession) {
-      recordQuizCompletion(currentSession);
-    }
-    setGameMode('results');
-    if (soundEnabled) {
-      playSound('game-end');
-    }
-  };
-
-  const playSound = (type: string) => {
-    // Mock sound playing - in real app, implement actual sound system
-    console.log(`Playing sound: ${type}`);
-  };
   const resetQuiz = () => {
     setCurrentSession(null);
     setGameMode('menu');
@@ -974,464 +1073,94 @@ const AIQuizArena: React.FC = () => {
     return currentSession.questions[currentSession.currentQuestionIndex];
   };
 
-  const handleCreateRoom = () => {
-    if (!socket) return;
+  // Handle document upload and quiz generation
+  const handleQuizGenerated = (quiz: any) => {
+    if (quiz && quiz.questions && quiz.questions.length > 0) {
+      // Ensure all questions have explanations
+      const questionsWithExplanations = quiz.questions.map((q: any, index: number) => ({
+        ...q,
+        explanation: q.explanation || `The correct answer is option ${q.correctAnswer + 1}. This question is based on your uploaded documents.`,
+        id: q.id || `doc_q_${Date.now()}_${index}`,
+        timeLimit: q.timeLimit || 60
+      }));
 
-    socket.emit('create_room', { userId: user?.id }, (response: any) => {
-      if (response.success) {
-        setRoomCode(response.roomCode);
-        setIsHost(true);
-        toast.success(`Room created! Code: ${response.roomCode}`);
-      } else {
-        toast.error('Failed to create room. Please try again.');
-      }
-    });
-  };
-
-  const handleJoinRoom = (code: string) => {
-    if (!socket) return;
-
-    socket.emit('join_room', { userId: user?.id, roomCode: code }, (response: any) => {
-      if (response.success) {
-        setRoomCode(code);
-        setIsHost(false);
-        toast.success(`Joined room: ${code}`);
-      } else {
-        toast.error('Failed to join room. Please check the code and try again.');
-      }
-    });
-  };
-
-  const handleLeaveRoom = () => {
-    if (!socket) return;
-
-    socket.emit('leave_room', { userId: user?.id, roomCode }, (response: any) => {
-      if (response.success) {
-        setRoomCode('');
-        setIsHost(false);
-        toast.success('Left the room');
-      } else {
-        toast.error('Failed to leave the room. Please try again.');
-      }
-    });
-  };  const handleStartMultiplayerQuiz = (category: string, mode: string) => {
-    if (!socket) return;
-
-    socket.emit('start_quiz', { userId: user?.id, roomCode, category, mode }, (response: any) => {      if (response.success) {
-        const { questions } = response;
-        const session: QuizSession = {
-          id: Date.now().toString(),
-          mode: mode as any,
-          category,
-          difficulty: 'adaptive',
-          questions: questions,
-          currentQuestionIndex: 0,
-          score: 0,
-          lives: mode === 'survival' ? 3 : 1, // Ensure survival mode always gets exactly 3 lives
-          timeRemaining: 0,
-          streak: 0,
-          powerUps: [],
-          startTime: new Date()
-        };
-        setCurrentSession(session);
-        setTimeLeft(session.questions[0]?.timeLimit || 30);
-        setGameMode('playing');
-        setSelectedAnswer(null);
-        setShowExplanation(false);
-        
-        // Reset tracking for new quiz
-        setQuestionAnswers([]);
-        
-        // Reset active power-ups for new quiz
-        setActivePowerUps({
-          doublePoints: false,
-          fiftyFifty: false,
-          usedFiftyFiftyQuestions: new Set()
-        });
-        
-        if (soundEnabled) {
-          playSound('game-start');
-        }
-        
-        toast.success(`🚀 Multiplayer ${mode} quiz started!`);
-      } else {
-        toast.error('Failed to start quiz. Please try again.');
-      }
-    });
-  };
-
-  // New multiplayer queue functions
-  const joinMultiplayerQueue = (category: string, difficulty: string) => {
-    if (!socket || !user) return;
-
-    socket.emit('join-multiplayer-queue', {
-      playerId: user.id,
-      playerName: user.name,
-      category,
-      difficulty
-    });
-
-    setMultiplayerState(prev => ({
-      ...prev,
-      inQueue: true
-    }));
-
-    toast.success('Joining multiplayer queue...');
-  };
-
-  const leaveMultiplayerQueue = () => {
-    if (!socket) return;
-
-    socket.emit('leave-queue');
-    setMultiplayerState({
-      inQueue: false,
-      gameFound: false,
-      roomId: null,
-      opponent: null,
-      gameStarted: false,
-      opponentScore: 0,
-      opponentAnswered: false
-    });
-
-    toast.success('Left multiplayer queue');
-  };
-
-  // Handle multiplayer answer submission
-  const handleMultiplayerAnswerSelect = (answerIndex: number) => {
-    if (selectedAnswer !== null || !currentSession || !socket || !multiplayerState.roomId) return;
-    
-    setSelectedAnswer(answerIndex);
-    const question = currentSession.questions[currentSession.currentQuestionIndex];
-    const isCorrect = answerIndex === question.correctAnswer;
-    
-    if (soundEnabled) {
-      playSound(isCorrect ? 'correct' : 'wrong');
-    }
-
-    // Submit answer to server
-    socket.emit('submit-answer', {
-      roomId: multiplayerState.roomId,
-      questionIndex: currentSession.currentQuestionIndex,
-      selectedAnswer: answerIndex,
-      timeRemaining: timeLeft
-    });
-
-    if (isCorrect) {
-      let points = question.points;
-      
-      // Apply double points power-up
-      if (activePowerUps.doublePoints) {
-        points *= 2;
-        setActivePowerUps(prev => ({
-          ...prev,
-          doublePoints: false
-        }));
-        toast.success(`Double points applied! +${points} points! 💎`);
-      }
-      
-      const newScore = currentSession.score + points;
-      const newStreak = currentSession.streak + 1;
-      
-      setCurrentSession(prev => prev ? {
-        ...prev,
-        score: newScore,
-        streak: newStreak
-      } : null);
-      
-      if (!activePowerUps.doublePoints) {
-        toast.success(`+${points} points!`);
-      }
-    } else {
-      setCurrentSession(prev => prev ? {
-        ...prev,
-        streak: 0
-      } : null);
-    }
-
-    setTimeout(() => {
-      setShowExplanation(true);
-    }, 1000);
-  };
-  useEffect(() => {
-    if (!socket) return;
-
-    socket.on('room_data', (data: any) => {
-      setConnectedUsers(data.connectedUsers);
-      setMultiplayerData(data);
-    });
-
-    socket.on('quiz_started', (data: any) => {
-      const { questions, mode } = data;
       const session: QuizSession = {
         id: Date.now().toString(),
-        mode: mode as any,
-        category: 'Multiplayer',
+        mode: selectedGameMode as any,
+        category: 'Document Upload',
         difficulty: 'adaptive',
-        questions: questions,
+        questions: questionsWithExplanations,
         currentQuestionIndex: 0,
         score: 0,
-        lives: mode === 'survival' ? 3 : 1,
+        lives: selectedGameMode === 'survival' ? 3 : 1,
         timeRemaining: 0,
         streak: 0,
         powerUps: [],
         startTime: new Date()
       };
+      
       setCurrentSession(session);
-      setTimeLeft(session.questions[0]?.timeLimit || 30);
+      setTimeLeft(questionsWithExplanations[0]?.timeLimit || 60);
       setGameMode('playing');
       setSelectedAnswer(null);
       setShowExplanation(false);
-      
-      // Reset active power-ups for new quiz
-      setActivePowerUps({
-        doublePoints: false,
-        fiftyFifty: false,
-        usedFiftyFiftyQuestions: new Set()
-      });
+      setQuestionAnswers([]);
+      setShowDocumentUploader(false);
       
       if (soundEnabled) {
         playSound('game-start');
       }
-    });
+      
+      toast.success(`Generated ${quiz.questions.length} questions from your files!`);
+    }
+  };
 
-    socket.on('quiz_ended', (data: any) => {
-      const { scores } = data;
-      setGameMode('results');
-      setLeaderboard(scores);
-      
-      if (soundEnabled) {
-        playSound('game-end');
-      }
-    });    // Multiplayer queue and game events
-    socket.on('queue-status', (data: any) => {
-      setMultiplayerState(prev => ({
-        ...prev,
-        inQueue: data.status === 'waiting'
-      }));
-      toast.success(data.message);
-    });
+  const openDocumentUploader = (mode: string) => {
+    setSelectedGameMode(mode);
+    setShowDocumentUploader(true);
+  };
 
-    socket.on('game-found', (data: any) => {
-      setMultiplayerState(prev => ({
-        ...prev,
-        inQueue: false,
-        gameFound: true,
-        roomId: data.roomId,
-        opponent: data.opponent
-      }));
-      
-      // Start the multiplayer game
-      const session: QuizSession = {
-        id: data.roomId,
-        mode: 'multiplayer',
-        category: data.category,
-        difficulty: data.difficulty,
-        questions: data.questions.map((q: any) => ({
-          ...q,
-          timeLimit: q.timeLimit || 30
-        })),
-        currentQuestionIndex: 0,
-        score: 0,
-        lives: 1,
-        timeRemaining: 0,
-        streak: 0,
-        powerUps: [],
-        startTime: new Date()
-      };
-      
-      setCurrentSession(session);
-      setTimeLeft(session.questions[0]?.timeLimit || 30);
-      setGameMode('playing');
-      setSelectedAnswer(null);
-      setShowExplanation(false);
-      
-      toast.success(`Game found! Playing against ${data.opponent.name}`);
-    });
-
-    socket.on('opponent-answered', (data: any) => {
-      setMultiplayerState(prev => ({
-        ...prev,
-        opponentAnswered: true
-      }));
-    });    socket.on('question-results', (data: any) => {
-      const { results, correctAnswer, explanation } = data;
-      const myResult = results.find((r: any) => r.playerId === user?.id);
-      const opponentResult = results.find((r: any) => r.playerId !== user?.id);
-      
-      // Update our session with the correct score from server
-      if (myResult && currentSession) {
-        setCurrentSession(prev => prev ? {
-          ...prev,
-          score: myResult.totalScore,
-          streak: myResult.isCorrect ? prev.streak + 1 : 0
-        } : null);
-      }
-      
-      // Update multiplayer state with opponent info
-      setMultiplayerState(prev => ({
-        ...prev,
-        opponentScore: opponentResult?.totalScore || 0,
-        opponentAnswered: false
-      }));
-      
-      // Show result feedback with correct answer and explanation
-      if (myResult) {
-        const currentQ = currentSession?.questions[currentSession.currentQuestionIndex];
-        const correctAnswerText = currentQ?.options[correctAnswer] || 'Unknown';
-        
-        const message = myResult.isCorrect 
-          ? `✅ Correct! +${myResult.points} points`
-          : `❌ Wrong. Correct answer: ${correctAnswerText}`;
-        toast.success(message);
-        
-        // Show explanation in multiplayer mode
-        if (explanation) {
-          setTimeout(() => {
-            toast.success(`💡 Explanation: ${explanation}`, { duration: 4000 });
-          }, 1000);
-        }
-      }
-      
-      // Show explanation immediately for multiplayer
-      setTimeout(() => {
-        setShowExplanation(true);
-      }, 1500);
-    });
-
-    socket.on('next-question', (data: any) => {
-      if (currentSession) {
-        setCurrentSession(prev => prev ? {
-          ...prev,
-          currentQuestionIndex: data.questionIndex
-        } : null);
-        setSelectedAnswer(null);
-        setShowExplanation(false);
-        setTimeLeft(data.question.timeLimit || 30);
-      }
-    });    socket.on('game-finished', (data: any) => {
-      setGameMode('results');
-      
-      if (data.tie) {
-        toast.success('🤝 It\'s a tie! Great game!');
-      } else if (data.winner) {
-        const isWinner = data.winner.playerId === user?.id;
-        toast.success(isWinner ? '🎉 You won the battle!' : `🏆 ${data.winner.playerName} wins! Good game!`);
-      } else {
-        toast.success('Game completed!');
-      }
-      
-      // Update final session with multiplayer results
-      if (currentSession) {
-        setCurrentSession(prev => prev ? {
-          ...prev,
-          score: data.players.find((p: any) => p.playerId === user?.id)?.score || prev.score
-        } : null);
-      }
-      
-      // Reset multiplayer state
-      setMultiplayerState({
-        inQueue: false,
-        gameFound: false,
-        roomId: null,
-        opponent: null,
-        gameStarted: false,
-        opponentScore: 0,
-        opponentAnswered: false
-      });
-    });
-
-    socket.on('opponent-disconnected', () => {
-      toast.success('Your opponent disconnected. You win!');
-      setGameMode('results');
-      setMultiplayerState({
-        inQueue: false,
-        gameFound: false,
-        roomId: null,
-        opponent: null,
-        gameStarted: false,
-        opponentScore: 0,
-        opponentAnswered: false
-      });
-    });
-
-    socket.on('game-error', (data: any) => {
-      toast.error(data.message);
-      setMultiplayerState({
-        inQueue: false,
-        gameFound: false,
-        roomId: null,
-        opponent: null,
-        gameStarted: false,
-        opponentScore: 0,
-        opponentAnswered: false
-      });
-    });
-
-    return () => {
-      socket.off('room_data');
-      socket.off('quiz_started');
-      socket.off('quiz_ended');
-      socket.off('queue-status');
-      socket.off('game-found');
-      socket.off('opponent-answered');
-      socket.off('question-results');
-      socket.off('next-question');
-      socket.off('game-finished');
-      socket.off('opponent-disconnected');
-      socket.off('game-error');
-    };
-  }, [socket, soundEnabled, currentSession, user]);
-
+  // Results screen
   if (gameMode === 'results' && currentSession) {
     return (
-      <AppLayout pageTitle="Quiz Results">        <div className="min-h-screen bg-gradient-to-br from-primary via-purple-600 to-primary/80 dark:from-purple-900 dark:via-blue-900 dark:to-indigo-900 p-6">
+      <AppLayout pageTitle="Quiz Results">
+        <div className="min-h-screen bg-gradient-to-br from-primary via-purple-600 to-primary/80 dark:from-purple-900 dark:via-blue-900 dark:to-indigo-900 p-6">
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="max-w-2xl mx-auto"
+            className="max-w-4xl mx-auto"
           >
-            <Card className="text-center bg-card/90 backdrop-blur border shadow-lg">
-              <CardHeader>
-                <motion.div
-                  initial={{ rotate: 0 }}
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1 }}
-                  className="mx-auto w-20 h-20 bg-yellow-400 rounded-full flex items-center justify-center mb-4"
-                >
-                  <Trophy className="h-10 w-10 text-yellow-900" />
-                </motion.div>
-                <CardTitle className="text-3xl">Quiz Complete!</CardTitle>
+            <Card className="bg-card/90 backdrop-blur border shadow-xl">
+              <CardHeader className="text-center">
+                <CardTitle className="text-3xl font-bold flex items-center justify-center gap-3">
+                  <Trophy className="h-8 w-8 text-yellow-500" />
+                  Quiz Complete!
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <p className="text-sm text-muted-foreground">Final Score</p>
-                    <p className="text-2xl font-bold text-foreground">{currentSession.score}</p>
+              <CardContent className="p-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-green-500">{currentSession.score}</div>
+                    <div className="text-muted-foreground">Final Score</div>
                   </div>
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <p className="text-sm text-muted-foreground">Best Streak</p>
-                    <p className="text-2xl font-bold text-foreground">{currentSession.streak}</p>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-blue-500">
+                      {Math.round(((questionAnswers.filter(qa => qa.wasCorrect).length) / (currentSession.currentQuestionIndex + 1)) * 100)}%
+                    </div>
+                    <div className="text-muted-foreground">Accuracy</div>
                   </div>
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <p className="text-sm text-muted-foreground">Accuracy</p>
-                    <p className="text-2xl font-bold text-foreground">
-                      {Math.round((currentSession.score / (currentSession.questions.length * 100)) * 100)}%
-                    </p>
-                  </div>
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <p className="text-sm text-muted-foreground">Time Taken</p>
-                    <p className="text-2xl font-bold text-foreground">
-                      {Math.round((Date.now() - currentSession.startTime.getTime()) / 60000)}m
-                    </p>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-purple-500">{currentSession.streak}</div>
+                    <div className="text-muted-foreground">Best Streak</div>
                   </div>
                 </div>
-                
-                <div className="space-y-2">
-                  <Button onClick={resetQuiz} className="w-full">
+
+                <div className="flex justify-center gap-4">
+                  <Button onClick={resetQuiz} variant="outline">
                     <RotateCcw className="h-4 w-4 mr-2" />
                     Play Again
                   </Button>
-                  <Button variant="outline" onClick={resetQuiz} className="w-full">
+                  <Button onClick={() => setGameMode('menu')}>
                     Back to Menu
                   </Button>
                 </div>
@@ -1443,278 +1172,186 @@ const AIQuizArena: React.FC = () => {
     );
   }
 
+  // Playing screen
   if (gameMode === 'playing' && currentSession) {
     const question = getCurrentQuestion();
     if (!question) return null;
 
     return (
-      <AppLayout pageTitle="Quiz Arena - Playing">        <div className="min-h-screen bg-gradient-to-br from-primary via-purple-600 to-primary/80 dark:from-indigo-900 dark:via-purple-900 dark:to-pink-900 p-6">
-          
-          {/* Game HUD */}
-          <div className="max-w-4xl mx-auto mb-6">
-            <div className="flex items-center justify-between bg-card/80 backdrop-blur rounded-lg p-4 border shadow-sm">
-              <div className="flex items-center space-x-6">
-                <div className="flex items-center space-x-2">
-                  <Trophy className="h-5 w-5 text-yellow-500" />
-                  <span className="font-bold text-foreground">{currentSession.score}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Flame className="h-5 w-5 text-orange-500" />
-                  <span className="text-foreground">Streak: {currentSession.streak}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-foreground">Lives:</span>
-                  {Array.from({ length: currentSession.lives }).map((_, i) => (
-                    <span key={i} className="text-red-500">❤️</span>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
-                  <Clock className="h-5 w-5 text-foreground" />
-                  <span className={`font-bold ${timeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-foreground'}`}>
-                    {timeLeft}s
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSoundEnabled(!soundEnabled)}
-                  className="hover:bg-muted"
-                >
-                  {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Question */}
+      <AppLayout pageTitle="Quiz Arena">
+        <div className="min-h-screen bg-gradient-to-br from-primary via-purple-600 to-primary/80 dark:from-purple-900 dark:via-blue-900 dark:to-indigo-900 p-6">
           <div className="max-w-4xl mx-auto">
-            <motion.div
-              key={currentSession.currentQuestionIndex}
-              initial={{ opacity: 0, x: 100 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -100 }}
-            >              <Card className="bg-card/90 backdrop-blur border shadow-sm mb-6">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <Badge className="bg-primary">
-                      Question {currentSession.currentQuestionIndex + 1} of {currentSession.questions.length}
+            {/* Quiz Header */}
+            <Card className="bg-card/90 backdrop-blur border shadow-lg mb-6">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-4">
+                    <Badge variant="secondary" className="text-lg px-3 py-1">
+                      {currentSession.currentQuestionIndex + 1} / {currentSession.questions.length}
                     </Badge>
-                    <Badge variant="outline">
-                      {question.points} points
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-muted-foreground" />
+                      <span className={`font-mono text-lg ${timeLeft <= 10 ? 'text-red-500 animate-pulse' : ''}`}>
+                        {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                      </span>
+                    </div>
                   </div>
-                  <CardTitle className="text-xl mt-4 text-foreground">{question.question}</CardTitle>
-                </CardHeader>
-              </Card>              {/* Answer Options */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {question.options.map((option, index) => {
-                  const isSelected = selectedAnswer === index;
-                  const isCorrect = index === question.correctAnswer;
-                  const showResult = selectedAnswer !== null;
-                  
-                  // 50/50 power-up logic: hide 2 wrong answers
-                  if (activePowerUps.usedFiftyFiftyQuestions.has(question.id) && !isCorrect) {
-                    // For 50/50, keep only correct answer and one random wrong answer
-                    const wrongAnswers = question.options
-                      .map((_, i) => i)
-                      .filter(i => i !== question.correctAnswer);
-                    
-                    // Use deterministic selection based on question ID to ensure consistency
-                    const selectedWrongIndex = wrongAnswers[0]; // Keep first wrong answer
-                    
-                    if (index !== selectedWrongIndex) {
-                      return null; // Hide this wrong option
-                    }
-                  }                  
-                  // Enhanced button color logic for better visual feedback
-                  let buttonClass = 'bg-card hover:bg-muted border text-foreground transition-all duration-300';
-                  
-                  if (showResult) {
-                    if (isCorrect) {
-                      // Always highlight correct answer in green
-                      buttonClass = 'bg-green-500 hover:bg-green-600 border-green-400 text-white font-semibold shadow-lg transform scale-105';
-                    } else if (isSelected && !isCorrect) {
-                      // Highlight user's wrong answer in red
-                      buttonClass = 'bg-red-500 hover:bg-red-600 border-red-400 text-white font-semibold shadow-lg';
-                    } else {
-                      // Non-selected wrong answers in muted style
-                      buttonClass = 'bg-muted/50 border-muted text-muted-foreground opacity-60';
-                    }
-                  } else if (isSelected) {
-                    // While answering, show selection feedback
-                    buttonClass = 'bg-blue-100 hover:bg-blue-200 border-blue-300 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200';
-                  }
-
-                  return (
-                    <motion.div
-                      key={index}
-                      whileHover={{ scale: selectedAnswer === null ? 1.02 : 1 }}
-                      whileTap={{ scale: 0.98 }}
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Star className="h-5 w-5 text-yellow-500" />
+                      <span className="font-bold">{currentSession.score}</span>
+                    </div>
+                    {currentSession.mode === 'survival' && (
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: currentSession.lives }, (_, i) => (
+                          <div key={i} className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
+                            <span className="text-white text-xs">❤️</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSoundEnabled(!soundEnabled)}
                     >
-                      <Button
-                        variant="outline"
-                        className={`w-full h-auto p-4 text-left justify-start ${buttonClass}`}
-                        onClick={() => handleAnswerSelect(index)}
-                        disabled={selectedAnswer !== null}
+                      {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+                <Progress value={(timeLeft / question.timeLimit) * 100} className="h-2" />
+              </CardContent>
+            </Card>
+
+            {/* Question Card */}
+            <Card className="bg-card/90 backdrop-blur border shadow-lg mb-6">
+              <CardContent className="p-8">
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge variant="outline">{question.difficulty}</Badge>
+                    <Badge variant="outline">{question.category}</Badge>
+                    <div className="ml-auto flex items-center gap-1">
+                      <Target className="h-4 w-4 text-yellow-500" />
+                      <span className="font-medium">{question.points} pts</span>
+                    </div>
+                  </div>
+                  <h2 className="text-xl font-semibold leading-relaxed">{question.question}</h2>
+                </div>
+
+                {/* Answer Options */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  {question.options.map((option, index) => {
+                    const isSelected = selectedAnswer === index;
+                    const isCorrect = index === question.correctAnswer;
+                    const showResult = selectedAnswer !== null;
+                    
+                    // 50/50 power-up logic: hide 2 wrong answers
+                    if (activePowerUps.usedFiftyFiftyQuestions.has(question.id) && !isCorrect) {
+                      // For 50/50, keep only correct answer and one random wrong answer
+                      const wrongAnswers = question.options
+                        .map((_, i) => i)
+                        .filter(i => i !== question.correctAnswer);
+                      
+                      // Use deterministic selection based on question ID to ensure consistency
+                      const selectedWrongIndex = wrongAnswers[0]; // Keep first wrong answer
+                      
+                      if (index !== selectedWrongIndex) {
+                        return null; // Hide this wrong option
+                      }
+                    }
+                    
+                    // Enhanced button color logic for better visual feedback
+                    let buttonClass = 'bg-card hover:bg-muted border text-foreground transition-all duration-300';
+                    
+                    if (showResult) {
+                      if (isCorrect) {
+                        // Always highlight correct answer in green
+                        buttonClass = 'bg-green-500 hover:bg-green-600 border-green-400 text-white font-semibold shadow-lg transform scale-105';
+                      } else if (isSelected && !isCorrect) {
+                        // Highlight user's wrong answer in red
+                        buttonClass = 'bg-red-500 hover:bg-red-600 border-red-400 text-white font-semibold shadow-lg';
+                      } else {
+                        // Non-selected wrong answers in muted style
+                        buttonClass = 'bg-muted/50 border-muted text-muted-foreground opacity-60';
+                      }
+                    } else if (isSelected) {
+                      // While answering, show selection feedback
+                      buttonClass = 'bg-blue-100 hover:bg-blue-200 border-blue-300 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200';
+                    }
+
+                    return (
+                      <motion.div
+                        key={index}
+                        whileHover={{ scale: selectedAnswer === null ? 1.02 : 1 }}
+                        whileTap={{ scale: 0.98 }}
                       >
-                        <span className="font-bold mr-3">
-                          {String.fromCharCode(65 + index)}.
-                        </span>
-                        <span className="text-left">{option}</span>
-                      </Button>
-                    </motion.div>
-                  );
-                })}
-              </div>              {/* Explanation */}
-              <AnimatePresence>
+                        <Button
+                          variant="outline"
+                          className={`w-full h-auto p-4 text-left justify-start ${buttonClass}`}
+                          onClick={() => handleAnswerSelect(index)}
+                          disabled={selectedAnswer !== null}
+                        >
+                          <span className="font-medium mr-3">
+                            {String.fromCharCode(65 + index)}.
+                          </span>
+                          {option}
+                        </Button>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+
+                {/* Explanation */}
                 {showExplanation && question.explanation && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.5 }}
-                  >                    <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 backdrop-blur border-blue-200 dark:border-blue-800 shadow-lg">
-                      <CardContent className="pt-6">
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-md">
-                            <Brain className="h-5 w-5 text-white" />
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-semibold mb-3 text-foreground flex items-center">
-                              💡 Explanation
-                              {selectedAnswer === question.correctAnswer && (
-                                <span className="ml-2 text-green-600 dark:text-green-400">✅ Correct!</span>
-                              )}
-                              {selectedAnswer !== null && selectedAnswer !== question.correctAnswer && (
-                                <span className="ml-2 text-red-600 dark:text-red-400">❌ Incorrect</span>
-                              )}
-                            </h4>
-                            <p className="text-blue-700 dark:text-blue-200 leading-relaxed text-sm md:text-base">
-                              {question.explanation}
-                            </p>
-                            {question.difficulty && (
-                              <div className="mt-3 flex items-center space-x-2">
-                                <Badge variant="outline" className="text-xs">
-                                  {question.difficulty}
-                                </Badge>
-                                <Badge variant="outline" className="text-xs">
-                                  {question.category || currentSession.category}
-                                </Badge>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4 mb-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-white text-sm">💡</span>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">Explanation</h4>
+                        <p className="text-blue-700 dark:text-blue-300">{question.explanation}</p>
+                      </div>
+                    </div>
                   </motion.div>
                 )}
+
+                {/* Fallback for missing explanation */}
                 {showExplanation && !question.explanation && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
+                    className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 mb-4"
                   >
-                    <Card className="bg-yellow-50 dark:bg-yellow-950/50 backdrop-blur border-yellow-200 dark:border-yellow-800">
-                      <CardContent className="pt-6">
-                        <div className="flex items-center space-x-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                            <span className="text-white text-sm">!</span>
-                          </div>
-                          <div>
-                            <p className="text-yellow-700 dark:text-yellow-200">
-                              No explanation available for this question.
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-white text-sm">ℹ️</span>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Correct Answer</h4>
+                        <p className="text-yellow-700 dark:text-yellow-300">
+                          The correct answer is option {String.fromCharCode(65 + question.correctAnswer)} - {question.options[question.correctAnswer]}
+                        </p>
+                      </div>
+                    </div>
                   </motion.div>
                 )}
-              </AnimatePresence>
-            </motion.div>
-          </div>          {/* Power-ups */}
-          <div className="fixed bottom-6 left-6 right-6">
-            <div className="max-w-4xl mx-auto">
-              {/* Active Power-ups Indicators */}
-              {(activePowerUps.doublePoints || activePowerUps.usedFiftyFiftyQuestions.has(currentSession?.questions[currentSession.currentQuestionIndex]?.id || '')) && (
-                <div className="mb-2 flex justify-center space-x-2">
-                  {activePowerUps.doublePoints && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}                      className="bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded-lg px-3 py-1 text-yellow-800 dark:text-yellow-200 text-sm font-medium"
-                    >
-                      💎 Double Points Active
-                    </motion.div>
-                  )}
-                  {currentSession && activePowerUps.usedFiftyFiftyQuestions.has(currentSession.questions[currentSession.currentQuestionIndex]?.id || '') && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg px-3 py-1 text-blue-800 dark:text-blue-200 text-sm font-medium"
-                    >
-                      ✂️ 50/50 Applied
-                    </motion.div>
-                  )}
-                </div>
-              )}
-
-              {/* Power-ups */}
-              <div className="flex justify-center space-x-2">
-                {powerUps.filter(p => p.available && playerStats.coins >= p.cost).map(powerUp => (
-                  <motion.button
-                    key={powerUp.id}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => usePowerUp(powerUp.id)}
-                    className="bg-card/80 backdrop-blur border rounded-lg p-3 hover:bg-muted transition-colors"
-                    disabled={selectedAnswer !== null}
-                  >
-                    <div className="text-xl mb-1">{powerUp.icon}</div>
-                    <div className="text-xs font-medium text-foreground">{powerUp.cost} coins</div>
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-          </div>          {/* Multiplayer UI for when in multiplayer mode */}
-          {currentSession?.mode === 'multiplayer' && multiplayerState.opponent && (
-            <div className="fixed top-20 right-6 bg-card/90 backdrop-blur border rounded-lg p-4 shadow-lg">
-              <div className="text-sm font-medium mb-2 text-foreground">Opponent: {multiplayerState.opponent.name}</div>
-              <div className="text-xs text-muted-foreground">Score: {multiplayerState.opponentScore}</div>
-              {multiplayerState.opponentAnswered && (
-                <div className="text-xs text-green-600 dark:text-green-400 mt-1">✓ Answered</div>
-              )}
-            </div>
-          )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </AppLayout>
     );
   }
 
-  // Main Menu
+  // Main menu
   return (
     <AppLayout pageTitle="AI Quiz Arena">
       <div className="min-h-screen bg-gradient-to-br from-primary via-purple-600 to-primary/80 dark:from-purple-900 dark:via-blue-900 dark:to-indigo-900 p-6">
-        
-        {/* Connection Status */}
-        {showConnectionError && (
-          <div className="fixed top-4 right-4 bg-red-100 dark:bg-red-900/20 backdrop-blur border border-red-300 dark:border-red-700 rounded-lg p-3 text-red-800 dark:text-red-200 text-sm shadow-lg">
-            <div className="flex items-center space-x-2">
-              <WifiOff className="h-4 w-4" />
-              <span>Connection lost. Reconnecting...</span>
-            </div>
-          </div>
-        )}        {isConnected && (
-          <div className="fixed top-4 right-4 bg-green-100 dark:bg-green-900/20 backdrop-blur border border-green-300 dark:border-green-700 rounded-lg p-3 text-green-800 dark:text-green-200 text-sm shadow-lg">
-            <div className="flex items-center space-x-2">
-              <Wifi className="h-4 w-4" />
-              <span>Connected</span>
-            </div>
-          </div>
-        )}
-
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <motion.div
@@ -1722,401 +1359,220 @@ const AIQuizArena: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-8"
           >
-            <div className="flex items-center justify-center mb-4">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                className="w-16 h-16 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mr-4"
-              >
-                <Zap className="h-8 w-8 text-white" />
-              </motion.div>
-              <h1 className="text-4xl font-bold text-foreground">AI Quiz Arena</h1>
-            </div>            <p className="text-xl text-purple-200 dark:text-purple-300">
-              Challenge yourself with AI-powered quizzes and compete with others!
+            <h1 className="text-4xl md:text-6xl font-bold text-white mb-4">
+              <Flame className="inline-block h-12 w-12 mr-4 text-orange-400" />
+              AI Quiz Arena
+            </h1>
+            <p className="text-white/80 text-lg">
+              Challenge yourself with adaptive AI-generated quizzes
             </p>
+          </motion.div>
+
+          {/* Categories */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mb-8"
+          >
+            <h2 className="text-2xl font-bold text-white mb-6 text-center">Choose Your Battle</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {categories.map((category) => (
+                <motion.div key={category.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Card className="bg-card/90 backdrop-blur border shadow-lg hover:shadow-xl transition-all cursor-pointer">
+                    <CardContent className="p-6">
+                      <div className={`w-12 h-12 rounded-lg bg-gradient-to-r ${category.color} flex items-center justify-center mb-4`}>
+                        <span className="text-2xl">{category.icon}</span>
+                      </div>
+                      <h3 className="font-bold text-lg mb-2">{category.name}</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {gameModes.map((mode) => (
+                          <Button
+                            key={mode.id}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => startQuiz(category.id, mode.id)}
+                            className="text-xs"
+                          >
+                            {mode.name}
+                          </Button>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Game Modes */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mb-8"
+          >
+            <h2 className="text-2xl font-bold text-white mb-6 text-center">Game Modes</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {gameModes.map((mode) => (
+                <motion.div key={mode.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Card className="bg-card/90 backdrop-blur border shadow-lg hover:shadow-xl transition-all cursor-pointer">
+                    <CardContent className="p-6 text-center">
+                      <div className={`w-16 h-16 rounded-full bg-gradient-to-r ${mode.color} flex items-center justify-center mx-auto mb-4 text-white`}>
+                        {mode.icon}
+                      </div>
+                      <h3 className="font-bold text-lg mb-2">{mode.name}</h3>
+                      <p className="text-muted-foreground text-sm mb-4">{mode.description}</p>
+                      <Button
+                        onClick={() => openDocumentUploader(mode.id)}
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload Docs
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
           </motion.div>
 
           {/* Player Stats */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="mb-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-6"
           >
             <Card className="bg-card/90 backdrop-blur border shadow-lg">
               <CardHeader>
-                <CardTitle className="flex items-center justify-between text-foreground">
-                  <span>Player Statistics</span>
-                  <div className="flex items-center space-x-2">
-                    <Crown className="h-5 w-5 text-yellow-500" />
-                    <span>Level {playerStats.level}</span>
-                  </div>
+                <CardTitle className="flex items-center text-foreground">
+                  <TrendingUp className="h-5 w-5 mr-2 text-green-500" />
+                  Your Progress
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-yellow-500">{playerStats.coins}</div>
-                    <div className="text-sm text-muted-foreground">Coins</div>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span>Level</span>
+                    <Badge>{playerStats.level}</Badge>
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-500">{playerStats.xp}</div>
-                    <div className="text-sm text-muted-foreground">XP</div>
-                  </div>                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-500">{playerStats.correctAnswers}</div>
-                    <div className="text-sm text-muted-foreground">Correct</div>
+                  <div className="flex justify-between items-center">
+                    <span>Total Quizzes</span>
+                    <span className="font-mono">{playerStats.totalQuizzes}</span>
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-500">{playerStats.bestStreak}</div>
-                    <div className="text-sm text-muted-foreground">Best Streak</div>
+                  <div className="flex justify-between items-center">
+                    <span>Accuracy</span>
+                    <span className="font-mono">
+                      {playerStats.totalQuizzes > 0 
+                        ? Math.round(((playerStats.correctAnswers || 0) / ((playerStats.totalQuizzes || 1) * 10)) * 100)
+                        : 0}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Best Streak</span>
+                    <span className="font-mono">{playerStats.bestStreak}</span>
                   </div>
                 </div>
-                <div className="mt-4">
-                  <div className="flex justify-between text-sm mb-1 text-foreground">
-                    <span>Progress to Level {playerStats.level + 1}</span>
-                    <span>{playerStats.xp % 100}/100</span>
-                  </div>
-                  <Progress value={(playerStats.xp % 100)} className="h-2" />
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/90 backdrop-blur border shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center text-foreground">
+                  <Medal className="h-5 w-5 mr-2 text-yellow-500" />
+                  Global Leaderboard
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {leaderboard.slice(0, 5).map((entry, index) => (
+                    <div key={entry.rank} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          index === 0 ? 'bg-yellow-500 text-white' :
+                          index === 1 ? 'bg-gray-400 text-white' :
+                          index === 2 ? 'bg-orange-500 text-white' :
+                          'bg-muted text-muted-foreground'
+                        }`}>
+                          {entry.rank}
+                        </div>
+                        <span className="font-medium">{entry.username}</span>
+                      </div>
+                      <span className="font-mono text-sm">{entry.score}</span>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
           </motion.div>
+        </div>
 
-          {/* Multiplayer Queue Status */}
-          {multiplayerState.inQueue && (
+        {/* Connection Status */}
+        <AnimatePresence>
+          {showConnectionError && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-6"
+              initial={{ opacity: 0, x: 100 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 100 }}
+              className="fixed top-4 right-4 bg-red-100 dark:bg-red-900/20 backdrop-blur border border-red-300 dark:border-red-700 rounded-lg p-3 text-red-800 dark:text-red-200 text-sm shadow-lg"
             >
-              <Card className="bg-yellow-100 dark:bg-yellow-900/20 backdrop-blur border-yellow-300 dark:border-yellow-700">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      >
-                        <Users className="h-6 w-6 text-yellow-400" />
-                      </motion.div>
-                      <div>
-                        <div className="font-semibold">Searching for opponent...</div>
-                        <div className="text-sm opacity-80">This might take a moment</div>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={leaveMultiplayerQueue}
-                      className="border-white/30 text-white hover:bg-white/20"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="flex items-center gap-2">
+                <WifiOff className="h-4 w-4" />
+                Connection lost. Retrying...
+              </div>
             </motion.div>
           )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Game Modes */}
-            <div className="lg:col-span-2">
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-              >                <Card className="bg-card/90 backdrop-blur border shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="flex items-center text-foreground">
-                      <Gamepad2 className="h-5 w-5 mr-2" />
-                      Choose Your Challenge
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    
-                    {/* Battle Arena - Multiplayer */}
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      className="border border-purple-200 dark:border-purple-700 rounded-lg p-4 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                            <Sword className="h-6 w-6 text-white" />
-                          </div>                          <div>
-                            <h3 className="font-bold text-lg text-foreground">Battle Arena</h3>
-                            <p className="text-sm text-muted-foreground">Real-time multiplayer battles</p>
-                          </div>
-                        </div>
-                        <Badge className="bg-purple-600">Multiplayer</Badge>
-                      </div>
-                      
-                      {!multiplayerState.inQueue ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {categories.map(category => (
-                            <div key={category.id} className="space-y-2">
-                              <div className="text-sm font-medium text-foreground">{category.name}</div>
-                              <div className="flex space-x-1">
-                                {['Easy', 'Medium', 'Hard'].map(difficulty => (
-                                  <Button
-                                    key={difficulty}
-                                    size="sm"
-                                    variant="outline"
-                                    className="flex-1 text-xs"
-                                    onClick={() => joinMultiplayerQueue(category.id, difficulty.toLowerCase())}
-                                  >
-                                    {difficulty}
-                                  </Button>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-4">
-                          <div className="text-yellow-400">Searching for opponent...</div>
-                        </div>
-                      )}
-                    </motion.div>                    {/* Classic Mode */}
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      className="border border-blue-200 dark:border-blue-700 rounded-lg p-4 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                    ><div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
-                            <Brain className="h-6 w-6 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-lg text-foreground">Classic Mode</h3>
-                            <p className="text-sm text-muted-foreground">Traditional quiz experience</p>
-                          </div>
-                        </div>
-                        <Badge variant="outline">Single Player</Badge>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {categories.map(category => (
-                          <Button
-                            key={category.id}
-                            variant="outline"
-                            size="sm"
-                            onClick={() => startQuiz(category.id, 'classic')}
-                          >
-                            {category.icon} {category.name}
-                          </Button>
-                        ))}
-                      </div>
-                    </motion.div>
-
-                    {/* Speed Round */}
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      className="border border-orange-200 dark:border-orange-700 rounded-lg p-4 cursor-pointer hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
-                    >                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
-                            <Zap className="h-6 w-6 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-lg text-foreground">Speed Round</h3>
-                            <p className="text-sm text-muted-foreground">Fast-paced questions</p>
-                          </div>
-                        </div>
-                        <Badge variant="outline">10s per Q</Badge>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {categories.map(category => (
-                          <Button
-                            key={category.id}
-                            variant="outline"
-                            size="sm"
-                            onClick={() => startQuiz(category.id, 'speed')}
-                          >
-                            {category.icon} {category.name}
-                          </Button>
-                        ))}
-                      </div>
-                    </motion.div>
-
-                    {/* Survival Mode */}
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      className="border border-red-200 dark:border-red-700 rounded-lg p-4 cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-gradient-to-r from-red-500 to-purple-500 rounded-lg flex items-center justify-center">
-                            <Shield className="h-6 w-6 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-lg text-foreground">Survival Mode</h3>
-                            <p className="text-sm text-muted-foreground">3 lives - how far can you go?</p>
-                          </div>
-                        </div>                        <Badge variant="outline">3 Lives</Badge>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {categories.map(category => (
-                          <Button
-                            key={category.id}
-                            variant="outline"
-                            size="sm"
-                            onClick={() => startQuiz(category.id, 'survival')}
-                          >
-                            {category.icon} {category.name}
-                          </Button>
-                        ))}
-                      </div>
-                    </motion.div>
-
-                    {/* Upload Content */}
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      className="border border-green-200 dark:border-green-700 rounded-lg p-4 cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg flex items-center justify-center">
-                            <Upload className="h-6 w-6 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-lg text-foreground">Custom Content</h3>
-                            <p className="text-sm text-muted-foreground">Upload your own materials</p>
-                          </div>
-                        </div>
-                        <Badge variant="outline">PDF/DOCX</Badge>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {['classic', 'speed', 'survival'].map(mode => (
-                          <Button
-                            key={mode}
-                            variant="outline"
-                            size="sm"
-                            className="capitalize"
-                            onClick={() => openDocumentUploader(mode)}
-                          >
-                            {mode} Mode
-                          </Button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Power-ups Shop */}
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-              >                <Card className="bg-card/90 backdrop-blur border shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="flex items-center text-foreground">
-                      <Star className="h-5 w-5 mr-2 text-yellow-500" />
-                      Power-ups
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {powerUps.map(powerUp => (
-                      <div
-                        key={powerUp.id}
-                        className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <span className="text-2xl">{powerUp.icon}</span>
-                          <div>
-                            <div className="font-medium text-foreground">{powerUp.name}</div>
-                            <div className="text-xs text-muted-foreground">{powerUp.description}</div>
-                          </div>
-                        </div>
-                        <div className="text-yellow-500 font-bold">{powerUp.cost}</div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </motion.div>
-
-              {/* Achievements */}
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 }}
-              >                <Card className="bg-card/90 backdrop-blur border shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="flex items-center text-foreground">
-                      <Trophy className="h-5 w-5 mr-2 text-yellow-500" />
-                      Recent Achievements
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {achievements.slice(0, 3).map(achievement => (
-                      <div
-                        key={achievement.id}
-                        className={`flex items-center space-x-3 p-3 rounded-lg ${
-                          achievement.unlocked 
-                            ? 'bg-green-100 dark:bg-green-900/20 border border-green-300 dark:border-green-700' 
-                            : 'bg-muted/30'
-                        }`}
-                      >
-                        <span className="text-2xl">{achievement.icon}</span>
-                        <div className="flex-1">
-                          <div className="font-medium text-foreground">{achievement.name}</div>
-                          <div className="text-xs text-muted-foreground">{achievement.description}</div>
-                          {!achievement.unlocked && (
-                            <div className="mt-1">
-                              <Progress 
-                                value={(achievement.progress / achievement.maxProgress) * 100} 
-                                className="h-1"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </motion.div>
-
-              {/* Leaderboard */}
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.2 }}
-              >                <Card className="bg-card/90 backdrop-blur border shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="flex items-center text-foreground">
-                      <Medal className="h-5 w-5 mr-2 text-yellow-500" />
-                      Global Leaderboard
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {leaderboard.slice(0, 5).map((entry, index) => (
-                      <div
-                        key={entry.rank}
-                        className="flex items-center justify-between p-2 bg-muted/30 rounded"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="w-6 h-6 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-xs font-bold text-black">
-                            {entry.rank}
-                          </div>
-                          <span className="font-medium text-foreground">{entry.username}</span>
-                        </div>
-                        <span className="text-yellow-500 font-bold">{entry.score}</span>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </div>
-          </div>
-        </div>
+          {isConnected && (
+            <motion.div
+              initial={{ opacity: 0, x: 100 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 100 }}
+              className="fixed top-4 right-4 bg-green-100 dark:bg-green-900/20 backdrop-blur border border-green-300 dark:border-green-700 rounded-lg p-3 text-green-800 dark:text-green-200 text-sm shadow-lg"
+            >
+              <div className="flex items-center gap-2">
+                <Wifi className="h-4 w-4" />
+                Connected
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Document Uploader Modal */}
         <AnimatePresence>
           {showDocumentUploader && (
-            <DocumentUploader
-              gameMode={selectedGameMode}
-              onQuizGenerated={handleQuizFromFiles}
-              onClose={() => setShowDocumentUploader(false)}
-            />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                className="bg-card rounded-lg border shadow-xl max-w-2xl w-full max-h-[80vh] overflow-auto"
+              >
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold">Upload Documents</h2>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setShowDocumentUploader(false)}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                  <DocumentUploader 
+                    onQuizGenerated={handleQuizGenerated} 
+                    gameMode={selectedGameMode}
+                    onClose={() => setShowDocumentUploader(false)}
+                  />
+                </div>
+              </motion.div>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
