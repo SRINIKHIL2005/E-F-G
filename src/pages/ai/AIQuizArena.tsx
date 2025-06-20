@@ -41,10 +41,13 @@ interface Question {
   options: string[];
   correctAnswer: number;
   explanation: string;
-  difficulty: 'Easy' | 'Medium' | 'Hard';
+  difficulty: 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Master';
   category: string;
   points: number;
   timeLimit: number;
+  difficultyRating: number; // 1-10 scale like LeetCode
+  tags: string[];
+  topicLevel: number; // 1-5 for progressive difficulty
 }
 
 interface QuizSession {
@@ -60,6 +63,10 @@ interface QuizSession {
   streak: number;
   powerUps: PowerUp[];
   startTime: Date;
+  accuracy: number;
+  totalTimeUsed: number;
+  bonusMultiplier: number;
+  levelProgression: number;
 }
 
 interface PowerUp {
@@ -67,9 +74,35 @@ interface PowerUp {
   name: string;
   description: string;
   icon: string;
-  type: 'time_freeze' | 'fifty_fifty' | 'extra_life' | 'double_points' | 'hint';
+  type: 'time_freeze' | 'fifty_fifty' | 'extra_life' | 'double_points' | 'hint' | 'shield' | 'lightning' | 'wisdom';
   cost: number;
   available: boolean;
+  duration?: number;
+  cooldown?: number;
+  effectiveness: number;
+}
+
+interface PlayerProgress {
+  level: number;
+  xp: number;
+  coins: number;
+  totalQuizzes: number;
+  correctAnswers: number;
+  wrongAnswers: number;
+  currentStreak: number;
+  bestStreak: number;
+  totalTimeSpent: number;
+  averageAccuracy: number;
+  categoryMastery: { [category: string]: number };
+  skillRating: number; // ELO-like rating system
+  rank: string; // Bronze, Silver, Gold, Platinum, Diamond, Master, Grandmaster
+  powerUpsUsed: number;
+  achievementsUnlocked: number;
+  multiplayerWins: number;
+  multiplayerLosses: number;
+  survivalBestScore: number;
+  speedBestScore: number;
+  classicBestScore: number;
 }
 
 interface Achievement {
@@ -114,17 +147,47 @@ const AIQuizArena: React.FC = () => {
     doublePoints: false,
     fiftyFifty: false,
     usedFiftyFiftyQuestions: new Set()
-  });
-  const [questionHistory, setQuestionHistory] = useState<Set<string>>(new Set());
-  const [playerStats, setPlayerStats] = useState({
+  });  const [questionHistory, setQuestionHistory] = useState<Set<string>>(new Set());
+  const [playerStats, setPlayerStats] = useState<PlayerProgress>({
     level: 1,
     xp: 0,
     coins: 100,
     totalQuizzes: 0,
     correctAnswers: 0,
+    wrongAnswers: 0,
     currentStreak: 0,
-    bestStreak: 0
-  });
+    bestStreak: 0,
+    totalTimeSpent: 0,
+    averageAccuracy: 0,
+    categoryMastery: {},
+    skillRating: 1000,
+    rank: 'Bronze',
+    powerUpsUsed: 0,
+    achievementsUnlocked: 0,
+    multiplayerWins: 0,
+    multiplayerLosses: 0,
+    survivalBestScore: 0,
+    speedBestScore: 0,
+    classicBestScore: 0
+  });  const [usedPowerUps, setUsedPowerUps] = useState<Set<string>>(new Set());
+  const [timeFreezeDuration, setTimeFreezeDuration] = useState(0);
+  const [shieldActive, setShieldActive] = useState(false);
+  const [lightningMode, setLightningMode] = useState(false);
+  const [lastQuestionTime, setLastQuestionTime] = useState(0);
+
+  // Categories for quiz generation
+  const categories = [
+    { id: 'general', name: 'General Knowledge', icon: '🌟' },
+    { id: 'science', name: 'Science', icon: '🔬' },
+    { id: 'technology', name: 'Technology', icon: '💻' },
+    { id: 'history', name: 'History', icon: '📚' },
+    { id: 'geography', name: 'Geography', icon: '🌍' },
+    { id: 'mathematics', name: 'Mathematics', icon: '🔢' },
+    { id: 'literature', name: 'Literature', icon: '📖' },
+    { id: 'sports', name: 'Sports', icon: '⚽' },
+    { id: 'entertainment', name: 'Entertainment', icon: '🎬' },
+    { id: 'custom', name: 'Custom Topic', icon: '🎯' }
+  ];
   // Multiplayer state
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -139,8 +202,8 @@ const AIQuizArena: React.FC = () => {
     roomId: string | null;
     opponent: { name: string; id: string } | null;
     gameStarted: boolean;
-    opponentScore: number;
-    opponentAnswered: boolean;
+    opponentScore: number;    opponentAnswered: boolean;
+    serverResultsReceived: boolean;
   }>({
     inQueue: false,
     gameFound: false,
@@ -148,17 +211,10 @@ const AIQuizArena: React.FC = () => {
     opponent: null,
     gameStarted: false,
     opponentScore: 0,
-    opponentAnswered: false
+    opponentAnswered: false,
+    serverResultsReceived: false
   });
 
-  const categories = [
-    { id: 'javascript', name: 'JavaScript Mastery', icon: '⚡', color: 'from-yellow-400 to-orange-500' },
-    { id: 'react', name: 'React Kingdom', icon: '⚛️', color: 'from-blue-400 to-cyan-500' },
-    { id: 'algorithms', name: 'Algorithm Arena', icon: '🧮', color: 'from-purple-400 to-pink-500' },
-    { id: 'databases', name: 'Database Dungeon', icon: '🗄️', color: 'from-green-400 to-emerald-500' },
-    { id: 'security', name: 'Cyber Fortress', icon: '🛡️', color: 'from-red-400 to-rose-500' },
-    { id: 'ai', name: 'AI Universe', icon: '🤖', color: 'from-indigo-400 to-purple-500' }
-  ];
   const gameModes = [
     {
       id: 'classic',
@@ -278,53 +334,92 @@ const AIQuizArena: React.FC = () => {
       socketIo.disconnect();
     };
   }, [token]);
-
   const initializePowerUps = () => {
     setPowerUps([
       {
-        id: '1',
+        id: 'time_freeze',
         name: 'Time Freeze',
         description: 'Stop the timer for 10 seconds',
         icon: '❄️',
         type: 'time_freeze',
         cost: 20,
-        available: true
+        available: true,
+        duration: 10,
+        cooldown: 0,
+        effectiveness: 100
       },
       {
-        id: '2',
+        id: 'fifty_fifty',
         name: '50/50',
         description: 'Remove 2 wrong answers',
         icon: '✂️',
         type: 'fifty_fifty',
         cost: 15,
-        available: true
+        available: true,
+        effectiveness: 100
       },
       {
-        id: '3',
+        id: 'extra_life',
         name: 'Extra Life',
-        description: 'Gain an additional life',
+        description: 'Gain an additional life (Survival mode)',
         icon: '❤️',
         type: 'extra_life',
         cost: 30,
-        available: true
+        available: true,
+        effectiveness: 100
       },
       {
-        id: '4',
+        id: 'double_points',
         name: 'Double Points',
-        description: 'Double points for next question',
+        description: 'Double points for next 3 questions',
         icon: '💎',
         type: 'double_points',
         cost: 25,
-        available: true
+        available: true,
+        duration: 3,
+        effectiveness: 200
       },
       {
-        id: '5',
-        name: 'AI Hint',
+        id: 'ai_hint',
+        name: 'AI Wisdom',
         description: 'Get a smart hint from AI',
         icon: '💡',
         type: 'hint',
         cost: 10,
-        available: true
+        available: true,
+        effectiveness: 80
+      },
+      {
+        id: 'shield',
+        name: 'Answer Shield',
+        description: 'Protect from one wrong answer',
+        icon: '🛡️',
+        type: 'shield',
+        cost: 35,
+        available: true,
+        duration: 1,
+        effectiveness: 100
+      },
+      {
+        id: 'lightning',
+        name: 'Lightning Mode',
+        description: 'Gain extra points for fast answers',
+        icon: '⚡',
+        type: 'lightning',
+        cost: 40,
+        available: true,
+        duration: 5,
+        effectiveness: 150
+      },
+      {
+        id: 'wisdom',
+        name: 'Ancient Wisdom',
+        description: 'Reveal question difficulty and category',
+        icon: '🔮',
+        type: 'wisdom',
+        cost: 12,
+        available: true,
+        effectiveness: 100
       }
     ]);
   };
@@ -470,17 +565,28 @@ const AIQuizArena: React.FC = () => {
       
       if (response.ok) {
         const data = await response.json();
-        const quizStats = data.quizStats || {};
-        setPlayerStats({
+        const quizStats = data.quizStats || {};        setPlayerStats({
           level: quizStats.level || 1,
           xp: quizStats.xp || 0,
           coins: quizStats.coins || 100,
           totalQuizzes: quizStats.totalQuizzes || 0,
           correctAnswers: quizStats.correctAnswers || 0,
+          wrongAnswers: quizStats.wrongAnswers || 0,
           currentStreak: quizStats.currentStreak || 0,
-          bestStreak: quizStats.bestStreak || 0
-        });
-      } else {
+          bestStreak: quizStats.bestStreak || 0,
+          totalTimeSpent: quizStats.totalTimeSpent || 0,
+          averageAccuracy: quizStats.averageAccuracy || 0,
+          categoryMastery: quizStats.categoryMastery || {},
+          skillRating: quizStats.skillRating || 1000,
+          rank: quizStats.rank || 'Bronze',
+          powerUpsUsed: quizStats.powerUpsUsed || 0,
+          achievementsUnlocked: quizStats.achievementsUnlocked || 0,
+          multiplayerWins: quizStats.multiplayerWins || 0,
+          multiplayerLosses: quizStats.multiplayerLosses || 0,
+          survivalBestScore: quizStats.survivalBestScore || 0,
+          speedBestScore: quizStats.speedBestScore || 0,
+          classicBestScore: quizStats.classicBestScore || 0
+        });      } else {
         console.error('Failed to fetch user quiz stats');
         // Fallback to default values
         setPlayerStats({
@@ -489,8 +595,21 @@ const AIQuizArena: React.FC = () => {
           coins: 100,
           totalQuizzes: 0,
           correctAnswers: 0,
+          wrongAnswers: 0,
           currentStreak: 0,
-          bestStreak: 0
+          bestStreak: 0,
+          totalTimeSpent: 0,
+          averageAccuracy: 0,
+          categoryMastery: {},
+          skillRating: 1000,
+          rank: 'Bronze',
+          powerUpsUsed: 0,
+          achievementsUnlocked: 0,
+          multiplayerWins: 0,
+          multiplayerLosses: 0,
+          survivalBestScore: 0,
+          speedBestScore: 0,
+          classicBestScore: 0
         });
       }
     } catch (error) {
@@ -502,8 +621,21 @@ const AIQuizArena: React.FC = () => {
         coins: 100,
         totalQuizzes: 0,
         correctAnswers: 0,
+        wrongAnswers: 0,
         currentStreak: 0,
-        bestStreak: 0
+        bestStreak: 0,
+        totalTimeSpent: 0,
+        averageAccuracy: 0,
+        categoryMastery: {},
+        skillRating: 1000,
+        rank: 'Bronze',
+        powerUpsUsed: 0,
+        achievementsUnlocked: 0,
+        multiplayerWins: 0,
+        multiplayerLosses: 0,
+        survivalBestScore: 0,
+        speedBestScore: 0,
+        classicBestScore: 0
       });
     }
   };  const startQuiz = async (category: string, mode: string) => {
@@ -575,25 +707,34 @@ const AIQuizArena: React.FC = () => {
       const validQuestions = questions.filter(q => 
         q.question && 
         Array.isArray(q.options) && 
-        q.options.length === 4 && 
+        q.options.length >= 2 && // Allow at least 2 options instead of strict 4
         typeof q.correctAnswer === 'number' && 
         q.correctAnswer >= 0 && 
-        q.correctAnswer < 4 &&
-        q.explanation &&
-        q.explanation.trim() !== '' && // Ensure explanation is not empty
-        q.id && 
-        q.id.includes('ai_') // Ensure it's AI generated, not fallback
+        q.correctAnswer < q.options.length && // Dynamic based on actual options length
+        q.id // Only require ID, not specific format
       );
 
       if (validQuestions.length === 0) {
-        throw new Error('No valid AI-generated questions found in response');
+        console.log('No questions passed validation. Raw questions:', questions);
+        throw new Error('No valid questions found in response');
       }
 
+      // Add explanations and ensure proper structure for all questions
+      const processedQuestions = validQuestions.map(q => ({
+        ...q,
+        explanation: q.explanation && q.explanation.trim() !== '' 
+          ? q.explanation 
+          : `The correct answer is "${q.options[q.correctAnswer]}". This tests your knowledge of ${category.toLowerCase()} concepts.`,
+        points: q.points || 100,
+        timeLimit: q.timeLimit || (mode === 'speed' ? 15 : 30),
+        category: category.toLowerCase(),
+        id: q.id || `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`      }));
+
       // Add questions to history to prevent future repeats
-      const newQuestionIds = validQuestions.map(q => q.id);
+      const newQuestionIds = processedQuestions.map(q => q.id);
       setQuestionHistory(prev => new Set([...prev, ...newQuestionIds]));
 
-      console.log(`✅ Validated ${validQuestions.length} AI-generated questions for ${mode.toUpperCase()} mode`);
+      console.log(`✅ Validated ${processedQuestions.length} questions for ${mode.toUpperCase()} mode`);
       console.log(`📚 Question history now contains ${questionHistory.size + newQuestionIds.length} questions`);
       
       // Mode-specific session configuration
@@ -602,14 +743,18 @@ const AIQuizArena: React.FC = () => {
         mode: mode as any,
         category,
         difficulty: difficultyLevel,
-        questions: validQuestions,
+        questions: processedQuestions,
         currentQuestionIndex: 0,
         score: 0,
         lives: mode === 'survival' ? 3 : 1,
         timeRemaining: 0,
         streak: 0,
         powerUps: [],
-        startTime: new Date()
+        startTime: new Date(),
+        accuracy: 0,
+        totalTimeUsed: 0,
+        bonusMultiplier: 1,
+        levelProgression: 0
       };
 
       setCurrentSession(session);
@@ -629,7 +774,7 @@ const AIQuizArena: React.FC = () => {
         playSound('game-start');
       }
 
-      toast.success(`Started ${mode.toUpperCase()} mode with ${validQuestions.length} AI-generated questions!`);
+      toast.success(`Started ${mode.toUpperCase()} mode with ${processedQuestions.length} questions!`);
 
     } catch (error) {
       console.error('Quiz generation error:', error);
@@ -642,21 +787,30 @@ const AIQuizArena: React.FC = () => {
     if (!quiz || !quiz.questions || quiz.questions.length === 0) {
       toast.error('No valid questions generated from files');
       return;
-    }
-
-    const session: QuizSession = {
+    }    const session: QuizSession = {
       id: Date.now().toString(),
       mode: selectedGameMode as any,
       category: 'Uploaded Content',
       difficulty: 'adaptive',
-      questions: quiz.questions,
+      questions: quiz.questions.map((q: any) => ({
+        ...q,
+        explanation: q.explanation || `This question tests your knowledge about ${q.category || 'the topic'}.`,
+        points: q.points || 100,
+        timeLimit: q.timeLimit || 30,
+        difficulty: q.difficulty || 'Medium',
+        category: q.category || 'General'
+      })),
       currentQuestionIndex: 0,
       score: 0,
       lives: selectedGameMode === 'survival' ? 3 : 1,
       timeRemaining: 0,
       streak: 0,
       powerUps: [],
-      startTime: new Date()
+      startTime: new Date(),
+      accuracy: 0,
+      totalTimeUsed: 0,
+      bonusMultiplier: 1,
+      levelProgression: 0
     };
 
     setCurrentSession(session);
@@ -1036,20 +1190,30 @@ const AIQuizArena: React.FC = () => {
 
     socket.emit('start_quiz', { userId: user?.id, roomCode, category, mode }, (response: any) => {
       if (response.success) {
-        const { questions } = response;
-        const session: QuizSession = {
+        const { questions } = response;        const session: QuizSession = {
           id: Date.now().toString(),
           mode: mode as any,
           category,
           difficulty: 'adaptive',
-          questions: questions,
+          questions: questions.map((q: any) => ({
+            ...q,
+            explanation: q.explanation || `This question tests your knowledge about ${q.category || category}.`,
+            points: q.points || 100,
+            timeLimit: q.timeLimit || 30,
+            difficulty: q.difficulty || 'Medium',
+            category: q.category || category
+          })),
           currentQuestionIndex: 0,
           score: 0,
           lives: mode === 'survival' ? 3 : 1,
           timeRemaining: 0,
           streak: 0,
           powerUps: [],
-          startTime: new Date()
+          startTime: new Date(),
+          accuracy: 0,
+          totalTimeUsed: 0,
+          bonusMultiplier: 1,
+          levelProgression: 0
         };
         setCurrentSession(session);
         setTimeLeft(session.questions[0]?.timeLimit || 30);
@@ -1093,9 +1257,7 @@ const AIQuizArena: React.FC = () => {
   };
 
   const leaveMultiplayerQueue = () => {
-    if (!socket) return;
-
-    socket.emit('leave-queue');
+    if (!socket) return;    socket.emit('leave-queue');
     setMultiplayerState({
       inQueue: false,
       gameFound: false,
@@ -1103,7 +1265,8 @@ const AIQuizArena: React.FC = () => {
       opponent: null,
       gameStarted: false,
       opponentScore: 0,
-      opponentAnswered: false
+      opponentAnswered: false,
+      serverResultsReceived: false
     });
 
     toast.success('Left multiplayer queue');
@@ -1173,20 +1336,30 @@ const AIQuizArena: React.FC = () => {
     });
 
     socket.on('quiz_started', (data: any) => {
-      const { questions, mode } = data;
-      const session: QuizSession = {
+      const { questions, mode } = data;      const session: QuizSession = {
         id: Date.now().toString(),
         mode: mode as any,
         category: 'Multiplayer',
         difficulty: 'adaptive',
-        questions: questions,
+        questions: questions.map((q: any) => ({
+          ...q,
+          explanation: q.explanation || `This question tests your knowledge about ${q.category || 'the topic'}.`,
+          points: q.points || 100,
+          timeLimit: q.timeLimit || 30,
+          difficulty: q.difficulty || 'Medium',
+          category: q.category || 'Multiplayer'
+        })),
         currentQuestionIndex: 0,
         score: 0,
         lives: mode === 'survival' ? 3 : 1,
         timeRemaining: 0,
         streak: 0,
         powerUps: [],
-        startTime: new Date()
+        startTime: new Date(),
+        accuracy: 0,
+        totalTimeUsed: 0,
+        bonusMultiplier: 1,
+        levelProgression: 0
       };
       setCurrentSession(session);
       setTimeLeft(session.questions[0]?.timeLimit || 30);
@@ -1231,8 +1404,7 @@ const AIQuizArena: React.FC = () => {
         roomId: data.roomId,
         opponent: data.opponent
       }));
-      
-      // Start the multiplayer game
+        // Start the multiplayer game
       const session: QuizSession = {
         id: data.roomId,
         mode: 'multiplayer',
@@ -1240,7 +1412,11 @@ const AIQuizArena: React.FC = () => {
         difficulty: data.difficulty,
         questions: data.questions.map((q: any) => ({
           ...q,
-          timeLimit: q.timeLimit || 30
+          explanation: q.explanation || `This question tests your knowledge about ${q.category || data.category}.`,
+          points: q.points || 100,
+          timeLimit: q.timeLimit || 30,
+          difficulty: q.difficulty || 'Medium',
+          category: q.category || data.category
         })),
         currentQuestionIndex: 0,
         score: 0,
@@ -1248,7 +1424,11 @@ const AIQuizArena: React.FC = () => {
         timeRemaining: 0,
         streak: 0,
         powerUps: [],
-        startTime: new Date()
+        startTime: new Date(),
+        accuracy: 0,
+        totalTimeUsed: 0,
+        bonusMultiplier: 1,
+        levelProgression: 0
       };
       
       setCurrentSession(session);
@@ -1278,12 +1458,12 @@ const AIQuizArena: React.FC = () => {
           streak: myResult.isCorrect ? prev.streak + 1 : 0
         } : null);
       }
-      
-      // Update multiplayer state with opponent info
+        // Update multiplayer state with opponent info and server results flag
       setMultiplayerState(prev => ({
         ...prev,
         opponentScore: opponentResult?.totalScore || 0,
-        opponentAnswered: false
+        opponentAnswered: false,
+        serverResultsReceived: true
       }));
 
       // Show result feedback with explanation
@@ -1303,10 +1483,15 @@ const AIQuizArena: React.FC = () => {
         setCurrentSession(prev => prev ? {
           ...prev,
           currentQuestionIndex: data.questionIndex
-        } : null);
-        setSelectedAnswer(null);
+        } : null);        setSelectedAnswer(null);
         setShowExplanation(false);
         setTimeLeft(data.question.timeLimit || 30);
+        
+        // Reset server results flag for new question
+        setMultiplayerState(prev => ({
+          ...prev,
+          serverResultsReceived: false
+        }));
         
         // Reset any active power-ups for the new question
         setActivePowerUps(prev => ({
@@ -1333,8 +1518,7 @@ const AIQuizArena: React.FC = () => {
           score: data.players.find((p: any) => p.playerId === user?.id)?.score || prev.score
         } : null);
       }
-      
-      // Reset multiplayer state
+        // Reset multiplayer state
       setMultiplayerState({
         inQueue: false,
         gameFound: false,
@@ -1342,7 +1526,8 @@ const AIQuizArena: React.FC = () => {
         opponent: null,
         gameStarted: false,
         opponentScore: 0,
-        opponentAnswered: false
+        opponentAnswered: false,
+        serverResultsReceived: false
       });
     });
 
@@ -1351,25 +1536,25 @@ const AIQuizArena: React.FC = () => {
       setGameMode('results');
       setMultiplayerState({
         inQueue: false,
-        gameFound: false,
-        roomId: null,
+        gameFound: false,        roomId: null,
         opponent: null,
         gameStarted: false,
         opponentScore: 0,
-        opponentAnswered: false
+        opponentAnswered: false,
+        serverResultsReceived: false
       });
     });
 
     socket.on('game-error', (data: any) => {
-      toast.error(data.message);
-      setMultiplayerState({
+      toast.error(data.message);      setMultiplayerState({
         inQueue: false,
         gameFound: false,
         roomId: null,
         opponent: null,
         gameStarted: false,
         opponentScore: 0,
-        opponentAnswered: false
+        opponentAnswered: false,
+        serverResultsReceived: false
       });
     });
 
@@ -1537,19 +1722,31 @@ const AIQuizArena: React.FC = () => {
                     if (index !== selectedWrongIndex) {
                       return null; // Hide this wrong option
                     }
-                  }
-                    let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
-                  
-                  if (showResult) {
-                    if (isCorrect) {
-                      // Always show correct answer in green after answering
-                      buttonClass = 'bg-green-500 border-green-400 text-white';
-                    } else if (isSelected) {
-                      // Only show selected wrong answer in red
-                      buttonClass = 'bg-red-500 border-red-400 text-white';
+                  }                  let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
+                    if (showResult) {
+                    if (currentSession?.mode === 'multiplayer') {
+                      // In multiplayer, only highlight selected answer until server response
+                      if (isSelected) {
+                        buttonClass = isCorrect && multiplayerState.serverResultsReceived
+                          ? 'bg-green-500 border-green-400 text-white'
+                          : !isCorrect && multiplayerState.serverResultsReceived
+                          ? 'bg-red-500 border-red-400 text-white'
+                          : 'bg-blue-500 border-blue-400 text-white'; // Pending state
+                      } else if (isCorrect && multiplayerState.serverResultsReceived) {
+                        // Show correct answer in green only after server confirms
+                        buttonClass = 'bg-green-500 border-green-400 text-white';
+                      } else {
+                        buttonClass = 'bg-white/10 border-white/30 text-white/70';
+                      }
                     } else {
-                      // Other wrong answers remain neutral
-                      buttonClass = 'bg-white/10 border-white/30 text-white/70';
+                      // Single-player logic
+                      if (isCorrect) {
+                        buttonClass = 'bg-green-500 border-green-400 text-white';
+                      } else if (isSelected) {
+                        buttonClass = 'bg-red-500 border-red-400 text-white';
+                      } else {
+                        buttonClass = 'bg-white/10 border-white/30 text-white/70';
+                      }
                     }
                   }
 
