@@ -13,11 +13,9 @@ services:
       - key: PORT
         value: 10000
       - fromGroup: backend-secrets
-    
-  # Frontend Service  
-  - type: web
+      # Frontend Service  
+  - type: static
     name: efg-frontend
-    env: static
     plan: free
     buildCommand: npm install && npm run build:render
     staticPublishPath: ./dist
