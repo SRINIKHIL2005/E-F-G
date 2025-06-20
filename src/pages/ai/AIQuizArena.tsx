@@ -174,7 +174,6 @@ const AIQuizArena: React.FC = () => {
   const [shieldActive, setShieldActive] = useState(false);
   const [lightningMode, setLightningMode] = useState(false);
   const [lastQuestionTime, setLastQuestionTime] = useState(0);
-
   // Categories for quiz generation
   const categories = [
     { id: 'general', name: 'General Knowledge', icon: '🌟' },
@@ -186,8 +185,14 @@ const AIQuizArena: React.FC = () => {
     { id: 'literature', name: 'Literature', icon: '📖' },
     { id: 'sports', name: 'Sports', icon: '⚽' },
     { id: 'entertainment', name: 'Entertainment', icon: '🎬' },
-    { id: 'custom', name: 'Custom Topic', icon: '🎯' }
+    { id: 'programming', name: 'Programming', icon: '💻' }
   ];
+
+  // Helper function to get readable category name
+  const getCategoryDisplayName = (categoryId: string) => {
+    const category = categories.find(c => c.id === categoryId);
+    return category ? category.name.toLowerCase() : 'the topic';
+  };
   // Multiplayer state
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -717,18 +722,17 @@ const AIQuizArena: React.FC = () => {
       if (validQuestions.length === 0) {
         console.log('No questions passed validation. Raw questions:', questions);
         throw new Error('No valid questions found in response');
-      }
-
-      // Add explanations and ensure proper structure for all questions
+      }      // Add explanations and ensure proper structure for all questions
       const processedQuestions = validQuestions.map(q => ({
         ...q,
         explanation: q.explanation && q.explanation.trim() !== '' 
           ? q.explanation 
-          : `The correct answer is "${q.options[q.correctAnswer]}". This tests your knowledge of ${category.toLowerCase()} concepts.`,
+          : `The correct answer is "${q.options[q.correctAnswer]}". This tests your knowledge of ${getCategoryDisplayName(category)} concepts.`,
         points: q.points || 100,
         timeLimit: q.timeLimit || (mode === 'speed' ? 15 : 30),
-        category: category.toLowerCase(),
-        id: q.id || `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`      }));
+        category: getCategoryDisplayName(category),
+        id: q.id || `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      }));
 
       // Add questions to history to prevent future repeats
       const newQuestionIds = processedQuestions.map(q => q.id);
@@ -791,10 +795,9 @@ const AIQuizArena: React.FC = () => {
       id: Date.now().toString(),
       mode: selectedGameMode as any,
       category: 'Uploaded Content',
-      difficulty: 'adaptive',
-      questions: quiz.questions.map((q: any) => ({
+      difficulty: 'adaptive',      questions: quiz.questions.map((q: any) => ({
         ...q,
-        explanation: q.explanation || `This question tests your knowledge about ${q.category || 'the topic'}.`,
+        explanation: q.explanation || `This question tests your knowledge about the uploaded content.`,
         points: q.points || 100,
         timeLimit: q.timeLimit || 30,
         difficulty: q.difficulty || 'Medium',
@@ -1194,14 +1197,13 @@ const AIQuizArena: React.FC = () => {
           id: Date.now().toString(),
           mode: mode as any,
           category,
-          difficulty: 'adaptive',
-          questions: questions.map((q: any) => ({
+          difficulty: 'adaptive',          questions: questions.map((q: any) => ({
             ...q,
-            explanation: q.explanation || `This question tests your knowledge about ${q.category || category}.`,
+            explanation: q.explanation || `This question tests your knowledge about ${getCategoryDisplayName(category) || 'the topic'}.`,
             points: q.points || 100,
             timeLimit: q.timeLimit || 30,
             difficulty: q.difficulty || 'Medium',
-            category: q.category || category
+            category: getCategoryDisplayName(category) || 'General'
           })),
           currentQuestionIndex: 0,
           score: 0,
@@ -1340,10 +1342,9 @@ const AIQuizArena: React.FC = () => {
         id: Date.now().toString(),
         mode: mode as any,
         category: 'Multiplayer',
-        difficulty: 'adaptive',
-        questions: questions.map((q: any) => ({
+        difficulty: 'adaptive',        questions: questions.map((q: any) => ({
           ...q,
-          explanation: q.explanation || `This question tests your knowledge about ${q.category || 'the topic'}.`,
+          explanation: q.explanation || `This question tests your knowledge about the topic.`,
           points: q.points || 100,
           timeLimit: q.timeLimit || 30,
           difficulty: q.difficulty || 'Medium',
@@ -1409,14 +1410,13 @@ const AIQuizArena: React.FC = () => {
         id: data.roomId,
         mode: 'multiplayer',
         category: data.category,
-        difficulty: data.difficulty,
-        questions: data.questions.map((q: any) => ({
+        difficulty: data.difficulty,        questions: data.questions.map((q: any) => ({
           ...q,
-          explanation: q.explanation || `This question tests your knowledge about ${q.category || data.category}.`,
+          explanation: q.explanation || `This question tests your knowledge about ${data.category || 'the topic'}.`,
           points: q.points || 100,
           timeLimit: q.timeLimit || 30,
           difficulty: q.difficulty || 'Medium',
-          category: q.category || data.category
+          category: data.category || 'General'
         })),
         currentQuestionIndex: 0,
         score: 0,
