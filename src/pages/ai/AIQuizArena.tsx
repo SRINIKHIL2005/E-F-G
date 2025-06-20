@@ -173,25 +173,22 @@ const AIQuizArena: React.FC = () => {
   const [timeFreezeDuration, setTimeFreezeDuration] = useState(0);
   const [shieldActive, setShieldActive] = useState(false);
   const [lightningMode, setLightningMode] = useState(false);
-  const [lastQuestionTime, setLastQuestionTime] = useState(0);
-  // Categories for quiz generation
+  const [lastQuestionTime, setLastQuestionTime] = useState(0);  // Categories for quiz generation
   const categories = [
-    { id: 'general', name: 'General Knowledge', icon: '🌟' },
-    { id: 'science', name: 'Science', icon: '🔬' },
-    { id: 'technology', name: 'Technology', icon: '💻' },
-    { id: 'history', name: 'History', icon: '📚' },
-    { id: 'geography', name: 'Geography', icon: '🌍' },
-    { id: 'mathematics', name: 'Mathematics', icon: '🔢' },
-    { id: 'literature', name: 'Literature', icon: '📖' },
-    { id: 'sports', name: 'Sports', icon: '⚽' },
-    { id: 'entertainment', name: 'Entertainment', icon: '🎬' },
-    { id: 'programming', name: 'Programming', icon: '💻' }
+    { id: 'javascript', name: 'JavaScript Mastery', icon: '⚡', color: 'from-yellow-400 to-orange-500' },
+    { id: 'react', name: 'React Kingdom', icon: '⚛️', color: 'from-blue-400 to-cyan-500' },
+    { id: 'algorithms', name: 'Algorithm Arena', icon: '🧮', color: 'from-purple-400 to-pink-500' },
+    { id: 'databases', name: 'Database Dungeon', icon: '�️', color: 'from-green-400 to-emerald-500' },
+    { id: 'security', name: 'Cyber Fortress', icon: '�️', color: 'from-red-400 to-rose-500' },
+    { id: 'ai', name: 'AI Universe', icon: '🤖', color: 'from-indigo-400 to-purple-500' },
+    { id: 'python', name: 'Python Playground', icon: '🐍', color: 'from-green-500 to-blue-500' },
+    { id: 'webdev', name: 'Web Development', icon: '🌐', color: 'from-pink-400 to-red-500' }
   ];
 
   // Helper function to get readable category name
   const getCategoryDisplayName = (categoryId: string) => {
     const category = categories.find(c => c.id === categoryId);
-    return category ? category.name.toLowerCase() : 'the topic';
+    return category ? category.name.toLowerCase() : categoryId.toLowerCase();
   };
   // Multiplayer state
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -727,7 +724,7 @@ const AIQuizArena: React.FC = () => {
         ...q,
         explanation: q.explanation && q.explanation.trim() !== '' 
           ? q.explanation 
-          : `The correct answer is "${q.options[q.correctAnswer]}". This tests your knowledge of ${getCategoryDisplayName(category)} concepts.`,
+          : `The correct answer is "${q.options[q.correctAnswer]}". This tests your knowledge of ${getCategoryDisplayName(category)} programming concepts.`,
         points: q.points || 100,
         timeLimit: q.timeLimit || (mode === 'speed' ? 15 : 30),
         category: getCategoryDisplayName(category),
@@ -1199,11 +1196,11 @@ const AIQuizArena: React.FC = () => {
           category,
           difficulty: 'adaptive',          questions: questions.map((q: any) => ({
             ...q,
-            explanation: q.explanation || `This question tests your knowledge about ${getCategoryDisplayName(category) || 'the topic'}.`,
+            explanation: q.explanation || `This question tests your knowledge about ${getCategoryDisplayName(category) || 'programming'} concepts.`,
             points: q.points || 100,
             timeLimit: q.timeLimit || 30,
             difficulty: q.difficulty || 'Medium',
-            category: getCategoryDisplayName(category) || 'General'
+            category: getCategoryDisplayName(category) || 'Programming'
           })),
           currentQuestionIndex: 0,
           score: 0,
@@ -1412,11 +1409,11 @@ const AIQuizArena: React.FC = () => {
         category: data.category,
         difficulty: data.difficulty,        questions: data.questions.map((q: any) => ({
           ...q,
-          explanation: q.explanation || `This question tests your knowledge about ${data.category || 'the topic'}.`,
+          explanation: q.explanation || `This question tests your knowledge about ${getCategoryDisplayName(data.category) || 'programming'} concepts.`,
           points: q.points || 100,
           timeLimit: q.timeLimit || 30,
           difficulty: q.difficulty || 'Medium',
-          category: data.category || 'General'
+          category: getCategoryDisplayName(data.category) || 'Programming'
         })),
         currentQuestionIndex: 0,
         score: 0,
@@ -2072,14 +2069,13 @@ const AIQuizArena: React.FC = () => {
                           </div>
                         </div>
                         <Badge variant="outline" className="border-white/30 text-white">Single Player</Badge>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      </div>                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {categories.map(category => (
                           <Button
                             key={category.id}
                             variant="outline"
                             size="sm"
-                            className="border-white/30 text-white hover:bg-white/20"
+                            className={`border-white/30 text-white hover:bg-white/20 bg-gradient-to-r ${category.color} border-transparent`}
                             onClick={() => startQuiz(category.id, 'classic')}
                           >
                             {category.icon} {category.name}
@@ -2109,13 +2105,12 @@ const AIQuizArena: React.FC = () => {
                         </div>
                         <Badge variant="outline" className="border-white/30 text-white">10s per Q</Badge>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {categories.map(category => (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">                        {categories.map(category => (
                           <Button
                             key={category.id}
                             variant="outline"
                             size="sm"
-                            className="border-white/30 text-white hover:bg-white/20"
+                            className={`border-white/30 text-white hover:bg-white/20 bg-gradient-to-r ${category.color} border-transparent`}
                             onClick={() => startQuiz(category.id, 'speed')}
                           >
                             {category.icon} {category.name}
@@ -2144,14 +2139,13 @@ const AIQuizArena: React.FC = () => {
                           </div>
                         </div>
                         <Badge variant="outline" className="border-white/30 text-white">3 Lives</Badge>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      </div>                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {categories.map(category => (
                           <Button
                             key={category.id}
                             variant="outline"
                             size="sm"
-                            className="border-white/30 text-white hover:bg-white/20"
+                            className={`border-white/30 text-white hover:bg-white/20 bg-gradient-to-r ${category.color} border-transparent`}
                             onClick={() => startQuiz(category.id, 'survival')}
                           >
                             {category.icon} {category.name}
