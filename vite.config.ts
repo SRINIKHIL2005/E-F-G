@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: "0.0.0.0", // Important for Render deployment
-      port: process.env.PORT ? parseInt(process.env.PORT) : 8080,
+      port: isRenderDeployment ? (process.env.PORT ? parseInt(process.env.PORT) : 8080) : 5173,
       strictPort: false, // Allow port flexibility on Render
       proxy: {
         "/api": {

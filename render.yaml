@@ -1,0 +1,67 @@
+services:
+  # Backend Service
+  - type: web
+    name: efg-backend
+    env: node
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: node server/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - fromGroup: backend-secrets
+    
+  # Frontend Service  
+  - type: web
+    name: efg-frontend
+    env: static
+    plan: free
+    buildCommand: npm install && npm run build:render
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: Cross-Origin-Opener-Policy
+        value: unsafe-none
+      - path: /*
+        name: Cross-Origin-Embedder-Policy  
+        value: unsafe-none
+      - path: /*
+        name: Cache-Control
+        value: max-age=31536000
+    envVars:
+      - fromGroup: frontend-secrets
+
+# Environment Variable Groups
+envVarGroups:
+  - name: backend-secrets
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        value: https://efg-frontend.onrender.com
+      - key: ALLOWED_ORIGINS
+        value: https://efg-frontend.onrender.com
+        
+  - name: frontend-secrets
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://efg-backend.onrender.com
+      - key: VITE_RENDER_DEPLOYMENT
+        value: true
+      - key: VITE_NODE_ENV
+        value: production
