@@ -97,8 +97,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 const AIQuizArena: React.FC = () => {
   const { user, token } = useAuth();
   const [gameMode, setGameMode] = useState<'menu' | 'playing' | 'results'>('menu');
-  const [currentSession, setCurrentSession] = useState<QuizSession | null>(null);
-  const [timeLeft, setTimeLeft] = useState(0);  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [currentSession, setCurrentSession] = useState<QuizSession | null>(null);  const [timeLeft, setTimeLeft] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [powerUps, setPowerUps] = useState<PowerUp[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
@@ -112,8 +112,10 @@ const AIQuizArena: React.FC = () => {
     usedFiftyFiftyQuestions: Set<string>;
   }>({
     doublePoints: false,
-    fiftyFifty: false,    usedFiftyFiftyQuestions: new Set()
+    fiftyFifty: false,
+    usedFiftyFiftyQuestions: new Set()
   });
+  const [questionHistory, setQuestionHistory] = useState<Set<string>>(new Set());
   const [playerStats, setPlayerStats] = useState({
     level: 1,
     xp: 0,
@@ -191,13 +193,45 @@ const AIQuizArena: React.FC = () => {
       features: ['Real-time competition', 'Fair matching', 'Competitive scoring', 'Strategic power-ups']
     }
   ];
-
   useEffect(() => {
     initializePowerUps();
     loadAchievements();
     loadLeaderboard();
     loadPlayerStats();
+    loadQuestionHistory();
   }, []);
+
+  useEffect(() => {
+    saveQuestionHistory();
+  }, [questionHistory]);
+
+  const loadQuestionHistory = () => {
+    try {
+      const userId = user?.id;
+      if (userId) {
+        const saved = localStorage.getItem(`quiz_history_${userId}`);
+        if (saved) {
+          const history = JSON.parse(saved);
+          setQuestionHistory(new Set(history));
+          console.log(`📚 Loaded question history: ${history.length} questions`);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading question history:', error);
+    }
+  };
+
+  const saveQuestionHistory = () => {
+    try {
+      const userId = user?.id;
+      if (userId && questionHistory.size > 0) {
+        localStorage.setItem(`quiz_history_${userId}`, JSON.stringify(Array.from(questionHistory)));
+        console.log(`💾 Saved question history: ${questionHistory.size} questions`);
+      }
+    } catch (error) {
+      console.error('Error saving question history:', error);
+    }
+  };
 
   useEffect(() => {
     let interval: number;
@@ -509,14 +543,14 @@ const AIQuizArena: React.FC = () => {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        },        body: JSON.stringify({
           subject: category,
           gameMode: mode,
           difficulty: difficultyLevel,
           questionCount: questionCount,
           topics: [], // Could add user preference topics here
-          previousQuestions: [] // Will be managed by server-side history
+          previousQuestions: Array.from(questionHistory), // Send question history to prevent repeats
+          userId: user?.id // Include user ID for server-side history tracking
         }),
       });
 
@@ -537,9 +571,7 @@ const AIQuizArena: React.FC = () => {
       
       if (!questions || !Array.isArray(questions) || questions.length === 0) {
         throw new Error('No valid AI-generated questions received from API');
-      }
-
-      // Validate questions before creating session
+      }      // Validate questions before creating session
       const validQuestions = questions.filter(q => 
         q.question && 
         Array.isArray(q.options) && 
@@ -548,6 +580,7 @@ const AIQuizArena: React.FC = () => {
         q.correctAnswer >= 0 && 
         q.correctAnswer < 4 &&
         q.explanation &&
+        q.explanation.trim() !== '' && // Ensure explanation is not empty
         q.id && 
         q.id.includes('ai_') // Ensure it's AI generated, not fallback
       );
@@ -556,7 +589,12 @@ const AIQuizArena: React.FC = () => {
         throw new Error('No valid AI-generated questions found in response');
       }
 
+      // Add questions to history to prevent future repeats
+      const newQuestionIds = validQuestions.map(q => q.id);
+      setQuestionHistory(prev => new Set([...prev, ...newQuestionIds]));
+
       console.log(`✅ Validated ${validQuestions.length} AI-generated questions for ${mode.toUpperCase()} mode`);
+      console.log(`📚 Question history now contains ${questionHistory.size + newQuestionIds.length} questions`);
       
       // Mode-specific session configuration
       const session: QuizSession = {
@@ -638,8 +676,7 @@ const AIQuizArena: React.FC = () => {
   const openDocumentUploader = (mode: string) => {
     setSelectedGameMode(mode);
     setShowDocumentUploader(true);
-  };
-  const handleAnswerSelect = (answerIndex: number) => {
+  };  const handleAnswerSelect = (answerIndex: number) => {
     if (selectedAnswer !== null || !currentSession) return;
     
     setSelectedAnswer(answerIndex);
@@ -690,12 +727,12 @@ const AIQuizArena: React.FC = () => {
         }, 1000);
         setTimeout(() => {
           endQuiz();
-        }, 4000);
+        }, 5000); // Give more time to read explanation
         return;
       }
     }
 
-    // Always show explanation after answer selection
+    // Always show explanation after answer selection with fallback
     setTimeout(() => {
       setShowExplanation(true);
     }, 1000);
@@ -703,7 +740,7 @@ const AIQuizArena: React.FC = () => {
     // Move to next question after showing explanation
     setTimeout(() => {
       nextQuestion();
-    }, 4000); // Increased time to ensure explanation is seen
+    }, 5000); // Increased time to ensure explanation is read
   };
 
   const nextQuestion = () => {
@@ -902,18 +939,50 @@ const AIQuizArena: React.FC = () => {
       playSound('game-end');
     }
   };
-
   const playSound = (type: string) => {
-    // Mock sound playing - in real app, implement actual sound system
-    console.log(`Playing sound: ${type}`);
+    if (!soundEnabled) return;
+    
+    try {
+      // Create audio context and play sound
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const frequency = type === 'correct' ? 800 : type === 'wrong' ? 400 : type === 'game-start' ? 600 : 500;
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+      
+      console.log(`🔊 Playing sound: ${type}`);
+    } catch (error) {
+      console.log(`🔇 Sound not available: ${type}`, error);
+    }
   };
-
   const resetQuiz = () => {
     setCurrentSession(null);
     setGameMode('menu');
     setSelectedAnswer(null);
     setShowExplanation(false);
     setTimeLeft(0);
+  };
+
+  const clearQuestionHistory = () => {
+    const userId = user?.id;
+    if (userId) {
+      localStorage.removeItem(`quiz_history_${userId}`);
+      setQuestionHistory(new Set());
+      toast.success('Question history cleared! You can now see all questions again.');
+      console.log('🗑️ Question history cleared');
+    }
   };
 
   const getCurrentQuestion = () => {
@@ -1038,8 +1107,7 @@ const AIQuizArena: React.FC = () => {
     });
 
     toast.success('Left multiplayer queue');
-  };
-  // Handle multiplayer answer submission
+  };  // Handle multiplayer answer submission
   const handleMultiplayerAnswerSelect = (answerIndex: number) => {
     if (selectedAnswer !== null || !currentSession || !socket || !multiplayerState.roomId) return;
     
@@ -1091,7 +1159,7 @@ const AIQuizArena: React.FC = () => {
       } : null);
     }
 
-    // Show explanation immediately for multiplayer
+    // Show explanation immediately for multiplayer with fallback
     setTimeout(() => {
       setShowExplanation(true);
     }, 1000);
@@ -1470,14 +1538,18 @@ const AIQuizArena: React.FC = () => {
                       return null; // Hide this wrong option
                     }
                   }
-                  
-                  let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
+                    let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
                   
                   if (showResult) {
                     if (isCorrect) {
+                      // Always show correct answer in green after answering
                       buttonClass = 'bg-green-500 border-green-400 text-white';
-                    } else if (isSelected && !isCorrect) {
+                    } else if (isSelected) {
+                      // Only show selected wrong answer in red
                       buttonClass = 'bg-red-500 border-red-400 text-white';
+                    } else {
+                      // Other wrong answers remain neutral
+                      buttonClass = 'bg-white/10 border-white/30 text-white/70';
                     }
                   }
 
@@ -1516,10 +1588,14 @@ const AIQuizArena: React.FC = () => {
                         <div className="flex items-start space-x-3">
                           <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
                             <Brain className="h-4 w-4" />
-                          </div>
-                          <div>
+                          </div>                          <div>
                             <h4 className="font-semibold mb-2">Explanation</h4>
-                            <p className="text-blue-100">{question.explanation}</p>
+                            <p className="text-blue-100">
+                              {question.explanation && question.explanation.trim() !== '' 
+                                ? question.explanation 
+                                : 'This question helps test your understanding of the topic. Review the correct answer and continue learning!'
+                              }
+                            </p>
                           </div>
                         </div>
                       </CardContent>
@@ -1923,10 +1999,61 @@ const AIQuizArena: React.FC = () => {
                   </CardContent>
                 </Card>
               </motion.div>
-            </div>
-
-            {/* Sidebar */}
+            </div>            {/* Sidebar */}
             <div className="space-y-6">
+              {/* Settings & History */}
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+              >
+                <Card className="bg-white/10 backdrop-blur border-white/20 text-white">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Shield className="h-5 w-5 mr-2 text-blue-400" />
+                      Settings & History
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-2xl">🔊</span>
+                        <div>
+                          <div className="font-medium">Sound Effects</div>
+                          <div className="text-xs opacity-80">Audio feedback for answers</div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSoundEnabled(!soundEnabled)}
+                        className={`${soundEnabled ? 'text-green-400' : 'text-red-400'}`}
+                      >
+                        {soundEnabled ? 'ON' : 'OFF'}
+                      </Button>
+                    </div>
+                    
+                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-2xl">📚</span>
+                        <div>
+                          <div className="font-medium">Question History</div>
+                          <div className="text-xs opacity-80">{questionHistory.size} questions completed</div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearQuestionHistory}
+                        className="text-yellow-400 hover:text-yellow-300"
+                        disabled={questionHistory.size === 0}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
               {/* Power-ups Shop */}
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
