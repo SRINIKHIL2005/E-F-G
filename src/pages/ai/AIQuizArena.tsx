@@ -221,7 +221,6 @@ const AIQuizArena: React.FC = () => {
     
     return Math.round(points);
   };
-
   // Helper function to calculate difficulty rating (1-10 scale like CodeChef/LeetCode)
   const calculateDifficultyRating = (difficulty: string) => {
     const ratings = {
@@ -234,6 +233,8 @@ const AIQuizArena: React.FC = () => {
     
     return ratings[difficulty as keyof typeof ratings] || 5;
   };
+  // Helper function declaration removed to prevent duplicate
+  
   // Helper function to determine if player levels up based on XP
   const checkLevelUp = (currentXP: number, currentLevel: number) => {
     const xpNeededForLevel = (level: number) => level * 1000; // Progressive XP requirement
@@ -1437,19 +1438,26 @@ const AIQuizArena: React.FC = () => {
       }
     });
   };
-
-  // New multiplayer queue functions  const joinMultiplayerQueue = (category: string, difficulty: string) => {
-    if (!socket || !user) return;
+  // New multiplayer queue functions
+  const joinMultiplayerQueue = (categoryId: string, difficulty: string) => {
+    if (!socket || !user) {
+      toast.error("Connection error. Please try again.");
+      return;
+    }
     
     // Get the selected quiz type (default to 'general' if none selected)
     const quizType = localStorage.getItem('selectedQuizType') || 'general';
     
+    // Get recent questions to prevent repeats (limited to last 50)
+    const recentQuestions = Array.from(questionHistory).slice(-50);
+    
     socket.emit('join-multiplayer-queue', {
       playerId: user.id,
       playerName: user.name,
-      category: category,
-      difficulty: difficulty,
-      quizType: quizType // Send the quiz type to the server
+      category: categoryId,
+      difficulty,
+      quizType, // Send the quiz type to the server
+      previousQuestions: recentQuestions // Send question history to prevent repeats
     });
 
     setMultiplayerState(prev => ({
@@ -1466,9 +1474,10 @@ const AIQuizArena: React.FC = () => {
     
     toast.success(`Joining ${quizTypeNames[quizType]} multiplayer queue...`);
   };
-
   const leaveMultiplayerQueue = () => {
-    if (!socket) return;    socket.emit('leave-queue');
+    if (!socket) return;
+    
+    socket.emit('leave-queue');
     setMultiplayerState({
       inQueue: false,
       gameFound: false,
@@ -1575,19 +1584,18 @@ const AIQuizArena: React.FC = () => {
     socket.on('room_data', (data: any) => {
       setConnectedUsers(data.connectedUsers);
       setMultiplayerData(data);
-    });
-
-    socket.on('quiz_started', (data: any) => {
+    });    socket.on('quiz_started', (data: any) => {
       const { questions, mode } = data;      const session: QuizSession = {
         id: Date.now().toString(),
         mode: mode as any,
         category: 'Multiplayer',
         difficulty: 'adaptive',        questions: questions.map((q: any) => ({
           ...q,
-          explanation: q.explanation || `This question tests your knowledge about the topic.`,
-          points: q.points || 100,
+          explanation: q.explanation || generateDetailedExplanation(q),
+          points: q.points || calculateQuestionPoints(q.difficulty || 'Medium', mode),
           timeLimit: q.timeLimit || 30,
           difficulty: q.difficulty || 'Medium',
+          difficultyRating: q.difficultyRating || calculateDifficultyRating(q.difficulty || 'Medium'),
           category: q.category || 'Multiplayer'
         })),
         currentQuestionIndex: 0,
@@ -1635,7 +1643,9 @@ const AIQuizArena: React.FC = () => {
         inQueue: data.status === 'waiting'
       }));
       toast.success(data.message);
-    });    socket.on('game-found', (data: any) => {
+    });
+
+    socket.on('game-found', (data: any) => {
       setMultiplayerState(prev => ({
         ...prev,
         inQueue: false,
@@ -1643,34 +1653,20 @@ const AIQuizArena: React.FC = () => {
         roomId: data.roomId,
         opponent: data.opponent
       }));
-        
-      // Update question history for multiplayer too to prevent repetition
-      const updatedQuestions = data.questions.map((q: any) => {
-        // Add each question ID to history
-        if (q.id) {
-          setQuestionHistory(prev => new Set([...prev, q.id]));
-        }
-        
-        // Ensure each question has complete data
-        return {
-          ...q,
-          explanation: q.explanation || `This question tests your knowledge about ${getCategoryDisplayName(data.category) || 'programming'} concepts.`,
-          points: q.points || calculateQuestionPoints(q.difficulty || 'Medium', 'multiplayer'),
-          timeLimit: q.timeLimit || 30,
-          difficulty: q.difficulty || 'Medium',
-          category: getCategoryDisplayName(data.category) || 'Programming',
-          difficultyRating: q.difficultyRating || calculateDifficultyRating(q.difficulty || 'Medium'),
-          topicLevel: q.topicLevel || Math.min(Math.max(1, playerStats.level), 5)
-        };
-      });
-      
-      // Start the multiplayer game
+        // Start the multiplayer game
       const session: QuizSession = {
         id: data.roomId,
         mode: 'multiplayer',
         category: data.category,
-        difficulty: data.difficulty,
-        questions: updatedQuestions,
+        difficulty: data.difficulty,        questions: data.questions.map((q: any) => ({
+          ...q,
+          explanation: q.explanation || `This question tests your knowledge about ${getCategoryDisplayName(data.category) || 'programming'} concepts.`,
+          points: q.points || calculateQuestionPoints(q.difficulty || 'Medium', 'multiplayer'),
+          timeLimit: q.timeLimit || 30,
+          difficultyRating: q.difficultyRating || calculateDifficultyRating(q.difficulty || 'Medium'),
+          difficulty: q.difficulty || 'Medium',
+          category: getCategoryDisplayName(data.category) || 'Programming'
+        })),
         currentQuestionIndex: 0,
         score: 0,
         lives: 1,
@@ -1683,12 +1679,18 @@ const AIQuizArena: React.FC = () => {
         bonusMultiplier: 1,
         levelProgression: 0
       };
-      
-      setCurrentSession(session);
+        setCurrentSession(session);
       setTimeLeft(session.questions[0]?.timeLimit || 30);
       setGameMode('playing');
       setSelectedAnswer(null);
       setShowExplanation(false);
+      
+      // Save questions to history to prevent repetition
+      const newQuestionIds = session.questions.map(q => q.id).filter(id => id && !questionHistory.has(id));
+      if (newQuestionIds.length > 0) {
+        setQuestionHistory(prev => new Set([...prev, ...newQuestionIds]));
+        console.log(`📚 Added ${newQuestionIds.length} new questions to history`);
+      }
       
       toast.success(`Game found! Playing against ${data.opponent.name}`);
     });
@@ -1826,6 +1828,38 @@ const AIQuizArena: React.FC = () => {
     };
   }, [socket, soundEnabled, currentSession, user]);
 
+  // Generate better explanations for questions with missing explanations
+  const generateDetailedExplanation = (question: any): string => {
+    const { category, correctAnswer, options } = question;
+    const correctOption = options[correctAnswer];
+    
+    // Get category display name
+    const categoryName = getCategoryDisplayName(category);
+    
+    // Get the quiz type
+    const quizType = localStorage.getItem('selectedQuizType') || 'general';
+    const quizTypeNames: {[key: string]: string} = {
+      'general': 'general knowledge',
+      'coding': 'programming concepts',
+      'trivia': 'tech trivia',
+      'puzzle': 'logical reasoning'
+    };
+    
+    // Create contextual explanations based on category and quiz type
+    const explanations: {[key: string]: string} = {
+      'javascript': `This JavaScript question tests your understanding of ${quizTypeNames[quizType]} in JavaScript. The correct answer "${correctOption}" demonstrates proper usage of JavaScript syntax and concepts.`,
+      'react': `In React development, "${correctOption}" is the correct approach because React components follow specific patterns for state management and rendering.`,
+      'algorithms': `In algorithm design, "${correctOption}" provides the optimal solution in terms of time and space complexity for this particular problem.`,
+      'databases': `For database operations, "${correctOption}" follows best practices for data integrity and query optimization.`,
+      'python': `In Python programming, "${correctOption}" is correct because Python's syntax and libraries are designed to handle this scenario efficiently.`,
+      'security': `From a cybersecurity perspective, "${correctOption}" offers the most secure approach to protect against common vulnerabilities.`,
+      'ai': `In artificial intelligence concepts, "${correctOption}" correctly applies principles of machine learning and neural networks.`,
+      'webdev': `For web development, "${correctOption}" follows modern best practices for responsive design and user experience.`,
+      'default': `The correct answer is "${correctOption}". This tests your knowledge of ${categoryName} ${quizTypeNames[quizType]}.`
+    };
+    
+    return explanations[category] || explanations.default;
+  };
   if (gameMode === 'results' && currentSession) {
     return (
       <AppLayout pageTitle="Quiz Results">
@@ -1942,35 +1976,50 @@ const AIQuizArena: React.FC = () => {
               initial={{ opacity: 0, x: 100 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -100 }}
-            >
-              <Card className="bg-white/10 backdrop-blur border-white/20 text-white mb-6">
-                <CardHeader>                  <div className="flex items-center justify-between">
-                    <Badge className="bg-purple-600">
+            >              <Card className="bg-white/10 backdrop-blur border-white/20 text-white mb-6">
+                <CardHeader>
+                  <div className="flex flex-wrap items-center justify-between">
+                    <Badge className="bg-purple-600 mb-2">
                       Question {currentSession.currentQuestionIndex + 1} of {currentSession.questions.length}
                     </Badge>
-                    <Badge variant="outline" className="border-white/30 text-white">
-                      {question.points} points
-                    </Badge>
-                  </div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Badge className={`${
-                      question.difficulty === 'Easy' ? 'bg-green-600' :
-                      question.difficulty === 'Medium' ? 'bg-blue-600' :
-                      question.difficulty === 'Hard' ? 'bg-orange-600' :
-                      question.difficulty === 'Expert' ? 'bg-red-600' :
-                      'bg-purple-600'
-                    }`}>
-                      {question.difficulty} (Lvl {question.difficultyRating || calculateDifficultyRating(question.difficulty)}/10)
-                    </Badge>
-                    {currentSession.streak >= 2 && (
-                      <Badge className="bg-orange-600">
-                        <Flame className="h-3 w-3 mr-1" /> Streak: {currentSession.streak}
+                    <div className="flex items-center space-x-2 mb-2">
+                      {/* Display difficulty level */}
+                      <Badge 
+                        className={`${
+                          question.difficulty === 'Easy' ? 'bg-green-600' : 
+                          question.difficulty === 'Medium' ? 'bg-blue-600' : 
+                          question.difficulty === 'Hard' ? 'bg-orange-600' : 
+                          question.difficulty === 'Expert' ? 'bg-red-600' : 'bg-purple-800'
+                        }`}
+                      >
+                        {question.difficulty}
                       </Badge>
-                    )}
+                      
+                      {/* Display points */}
+                      <Badge variant="outline" className="border-white/30 text-white">
+                        {question.points} points
+                      </Badge>
+                      
+                      {/* Display difficulty rating (like LeetCode) */}
+                      <Badge variant="outline" className="border-yellow-300/30 text-yellow-300">
+                        Difficulty: {question.difficultyRating}/10
+                      </Badge>
+                    </div>
                   </div>
-                  <CardTitle className="text-xl mt-2">{question.question}</CardTitle>
+                  
+                  {/* Display streak information */}
+                  {currentSession.streak > 0 && (
+                    <div className="bg-orange-500/20 rounded-md px-3 py-1 mt-2 mb-3 inline-flex items-center">
+                      <Flame className="h-4 w-4 text-orange-400 mr-2" />
+                      <span className="text-sm font-medium text-orange-300">
+                        {currentSession.streak} Question Streak!
+                      </span>
+                    </div>
+                  )}
+                  
+                  <CardTitle className="text-xl mt-4">{question.question}</CardTitle>
                 </CardHeader>
-              </Card>              {/* Answer Options */}
+              </Card>{/* Answer Options */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 {question.options.map((option, index) => {
                   const isSelected = selectedAnswer === index;
@@ -1989,26 +2038,19 @@ const AIQuizArena: React.FC = () => {
                     
                     if (index !== selectedWrongIndex) {
                       return null; // Hide this wrong option
-                    }
-                  }                  let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';                    if (showResult) {
+                    }                  }                  
+                  let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
+                  
+                  if (showResult) {
                     if (currentSession?.mode === 'multiplayer') {
-                      // Improved multiplayer answer highlighting
+                      // In multiplayer, only highlight selected answer until server response
                       if (isSelected) {
-                        if (multiplayerState.serverResultsReceived) {
-                          // After server confirms result
-                          buttonClass = isCorrect 
-                            ? 'bg-green-500 border-green-400 text-white' // Selected correct
-                            : 'bg-red-500 border-red-400 text-white'; // Selected wrong
-                        } else {
-                          // Before server confirmation, just show selection
-                          buttonClass = 'bg-blue-500 border-blue-400 text-white'; // Pending state
-                        }
+                        buttonClass = multiplayerState.serverResultsReceived
+                          ? (isCorrect ? 'bg-green-500 border-green-400 text-white' : 'bg-red-500 border-red-400 text-white')
+                          : 'bg-blue-500 border-blue-400 text-white'; // Pending state
                       } else if (isCorrect && multiplayerState.serverResultsReceived) {
-                        // Only show the correct answer after server confirms
-                        buttonClass = 'bg-green-500/40 border-green-400/40 text-white'; // Muted green if not selected
-                      } else {
-                        // Unselected, wrong answers stay neutral
-                        buttonClass = 'bg-white/10 border-white/30 text-white/70';
+                        // Only show correct answer after server confirms
+                        buttonClass = 'bg-green-500/40 border-green-400/40 text-white/70';
                       }
                     } else {
                       // Single-player logic
@@ -2021,17 +2063,22 @@ const AIQuizArena: React.FC = () => {
                       }
                     }
                   }
-
+                  
                   return (
                     <motion.div
                       key={index}
                       whileHover={{ scale: selectedAnswer === null ? 1.02 : 1 }}
                       whileTap={{ scale: 0.98 }}
-                    >
-                      <Button
+                    >                      <Button
                         variant="outline"
                         className={`w-full h-auto p-4 text-left justify-start ${buttonClass}`}
-                        onClick={() => currentSession?.mode === 'multiplayer' ? handleMultiplayerAnswerSelect(index) : handleAnswerSelect(index)}
+                        onClick={() => {
+                          if (currentSession?.mode === 'multiplayer') {
+                            handleMultiplayerAnswerSelect(index); 
+                          } else {
+                            handleAnswerSelect(index);
+                          }
+                        }}
                         disabled={selectedAnswer !== null}
                       >
                         <span className="font-bold mr-3">
@@ -2042,7 +2089,9 @@ const AIQuizArena: React.FC = () => {
                     </motion.div>
                   );
                 })}
-              </div>          {/* Explanation */}
+              </div>
+
+              {/* Explanation */}
               <AnimatePresence>
                 {showExplanation && (
                   <motion.div
@@ -2060,33 +2109,9 @@ const AIQuizArena: React.FC = () => {
                             <p className="text-blue-100">
                               {question.explanation && question.explanation.trim() !== '' 
                                 ? question.explanation 
-                                : currentSession?.mode === 'multiplayer'
-                                  ? `This ${question.difficulty} level question about ${getCategoryDisplayName(question.category)} tests your ${question.category} knowledge. The correct answer ${question.options[question.correctAnswer]} is recommended because ${
-                                      question.category === 'javascript' ? 'of JavaScript language behavior and syntax rules.' :
-                                      question.category === 'react' ? 'React components work this way according to best practices.' :
-                                      question.category === 'python' ? 'Python handles this operation in the standard library.' :
-                                      question.category === 'algorithms' ? 'this algorithm has specific implementation requirements.' :
-                                      question.category === 'databases' ? 'database design and normalization principles apply here.' :
-                                      question.category === 'security' ? 'following security best practices is essential.' :
-                                      'it follows programming best practices and patterns.'
-                                    }`
-                                  : 'This question helps test your understanding of the topic. Review the correct answer and continue learning!'
+                                : 'This question helps test your understanding of the topic. Review the correct answer and continue learning!'
                               }
                             </p>
-                            
-                            {/* Display difficulty rating and level */}
-                            {question.difficultyRating && (
-                              <div className="mt-3 flex items-center space-x-2">
-                                <Badge variant="outline" className="border-blue-300/30 text-blue-200">
-                                  Difficulty: {question.difficultyRating}/10
-                                </Badge>
-                                {currentSession?.streak > 1 && (
-                                  <Badge variant="outline" className="border-orange-300/30 text-orange-200">
-                                    Streak: {currentSession.streak}
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
                           </div>
                         </div>
                       </CardContent>
@@ -2318,8 +2343,7 @@ const AIQuizArena: React.FC = () => {
                         </div>
                         <Badge className="bg-purple-600">Multiplayer</Badge>
                       </div>
-                      
-                      {!multiplayerState.inQueue ? (
+                        {!multiplayerState.inQueue ? (
                         <div className="space-y-3">
                           {/* Quiz Type Selection for Battle Arena - New! */}
                           <div className="border border-purple-300/30 rounded-lg p-3 bg-purple-500/10">
