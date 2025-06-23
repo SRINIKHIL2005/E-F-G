@@ -822,50 +822,78 @@ const AIQuizArena: React.FC = () => {
         console.log('No questions passed validation. Raw questions:', questions);
         throw new Error('No valid questions found in response');
       }      // Add explanations and ensure proper structure for all questions
-      const processedQuestions = validQuestions.map((q, index) => ({
-        ...q,
-        explanation: q.explanation && q.explanation.trim() !== '' 
-          ? q.explanation 
-          : `The correct answer is "${q.options[q.correctAnswer]}". This tests your knowledge of ${getCategoryDisplayName(category)} programming concepts.`,
-        points: q.points || calculateQuestionPoints(q.difficulty || 'Medium', mode),
-        timeLimit: q.timeLimit || (mode === 'speed' ? 15 : mode === 'survival' ? 20 : 30),
-        category: getCategoryDisplayName(category),
-        id: q.id || `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        difficultyRating: q.difficultyRating || calculateDifficultyRating(q.difficulty || 'Medium'),
-        tags: q.tags || [category],
-        topicLevel: q.topicLevel || Math.min(Math.floor(playerStats.level / 3) + 1, 5)
-      }));
-
-      // Filter out questions that were recently asked (last 50 questions)
-      const recentQuestions = Array.from(questionHistory).slice(-50);
-      const freshQuestions = processedQuestions.filter(q => !recentQuestions.includes(q.id));
+      const processedQuestions = validQuestions.map((q, index) => {
+        let explanation = q.explanation;
+        
+        // Generate better explanations if needed
+        if (!explanation || explanation.trim() === '' || explanation.includes('tests your knowledge of')) {
+          const correctOption = q.options[q.correctAnswer];
+          const categoryName = getCategoryDisplayName(category);
+          
+          const categoryExplanations: {[key: string]: string} = {
+            'javascript mastery': `In JavaScript, "${correctOption}" is the correct answer because it follows proper syntax and best practices for modern JavaScript development.`,
+            'react kingdom': `In React, "${correctOption}" is correct as it aligns with React's component lifecycle and state management principles.`,
+            'algorithm arena': `For this algorithm, "${correctOption}" provides the optimal solution with the best time and space complexity.`,
+            'database dungeon': `In database design, "${correctOption}" follows best practices for data integrity and query optimization.`,
+            'cyber fortress': `From a security perspective, "${correctOption}" implements the most secure approach to prevent vulnerabilities.`,
+            'ai universe': `In AI/ML, "${correctOption}" correctly applies machine learning principles and neural network concepts.`,
+            'python playground': `In Python, "${correctOption}" leverages Python's syntax and libraries most effectively.`,
+            'web development': `For web development, "${correctOption}" follows modern best practices for performance and user experience.`
+          };
+          
+          explanation = categoryExplanations[categoryName.toLowerCase()] || 
+                       `The correct answer is "${correctOption}". This demonstrates proper understanding of ${categoryName} concepts.`;
+        }
+        
+        return {
+          ...q,
+          explanation,
+          points: q.points || calculateQuestionPoints(q.difficulty || 'Medium', mode),
+          timeLimit: q.timeLimit || (mode === 'speed' ? 15 : mode === 'survival' ? 20 : 30),
+          category: getCategoryDisplayName(category),
+          id: q.id || `${category}_${mode}_${Date.now()}_${index}`,
+          difficultyRating: q.difficultyRating || calculateDifficultyRating(q.difficulty || 'Medium'),
+          tags: q.tags || [category],
+          topicLevel: q.topicLevel || Math.min(Math.floor(playerStats.level / 3) + 1, 5)
+        };
+      });      // Filter out questions that were recently asked - improve repeat prevention
+      const historyArray = Array.from(questionHistory);
+      let freshQuestions = processedQuestions.filter(q => !historyArray.includes(q.id));
       
-      if (freshQuestions.length === 0) {
-        console.log('🔄 All questions were recent, using older questions but prioritizing less recent ones');
-        // If all questions are recent, use them but try to use the oldest ones first
-        freshQuestions.push(...processedQuestions.sort((a, b) => {
-          const aIndex = Array.from(questionHistory).indexOf(a.id);
-          const bIndex = Array.from(questionHistory).indexOf(b.id);
-          return aIndex - bIndex; // Earlier questions first
-        }));
+      if (freshQuestions.length < questionCount) {
+        console.log(`🔄 Only ${freshQuestions.length} fresh questions available, need ${questionCount}. Adding older questions.`);
+        
+        // If we don't have enough fresh questions, add some older ones
+        const olderQuestions = processedQuestions.filter(q => historyArray.includes(q.id));
+        const additionalNeeded = questionCount - freshQuestions.length;
+        
+        // Sort older questions by how long ago they were used (earliest in history = oldest usage)
+        olderQuestions.sort((a, b) => {
+          const aIndex = historyArray.indexOf(a.id);
+          const bIndex = historyArray.indexOf(b.id);
+          return aIndex - bIndex; // Earlier questions first (used longer ago)
+        });
+        
+        freshQuestions = [...freshQuestions, ...olderQuestions.slice(0, additionalNeeded)];
       }
 
       const finalQuestions = freshQuestions.slice(0, questionCount);
 
-      // Add questions to history to prevent future repeats
-      const newQuestionIds = processedQuestions.map(q => q.id);
-      setQuestionHistory(prev => new Set([...prev, ...newQuestionIds]));
-
-      console.log(`✅ Validated ${processedQuestions.length} questions for ${mode.toUpperCase()} mode`);
-      console.log(`📚 Question history now contains ${questionHistory.size + newQuestionIds.length} questions`);
+      // Add ONLY the final selected questions to history to prevent future repeats
+      const newQuestionIds = finalQuestions.map(q => q.id);
+      setQuestionHistory(prev => {
+        const updated = new Set([...prev, ...newQuestionIds]);
+        console.log(`📚 Question history updated: ${prev.size} -> ${updated.size} total questions tracked`);
+        return updated;
+      });console.log(`✅ Validated ${processedQuestions.length} questions for ${mode.toUpperCase()} mode`);
       
-      // Mode-specific session configuration
+      // Use finalQuestions instead of processedQuestions for the session
       const session: QuizSession = {
         id: Date.now().toString(),
         mode: mode as any,
         category,
         difficulty: difficultyLevel,
-        questions: processedQuestions,
+        questions: finalQuestions, // Use filtered questions to prevent repeats
         currentQuestionIndex: 0,
         score: 0,
         lives: mode === 'survival' ? 3 : 1,
@@ -1491,7 +1519,6 @@ const AIQuizArena: React.FC = () => {
 
     toast.success('Left multiplayer queue');
   };
-
   // Handle multiplayer answer submission
   const handleMultiplayerAnswerSelect = (answerIndex: number) => {
     if (selectedAnswer !== null || !currentSession || !socket || !multiplayerState.roomId) return;
@@ -1500,8 +1527,30 @@ const AIQuizArena: React.FC = () => {
     const question = currentSession.questions[currentSession.currentQuestionIndex];
     const isCorrect = answerIndex === question.correctAnswer;
     
+    // Improved multiplayer sound handling with delay and better error handling
     if (soundEnabled) {
-      playSound(isCorrect ? 'correct' : 'wrong');
+      setTimeout(() => {
+        try {
+          playSound(isCorrect ? 'correct' : 'wrong');
+          console.log(`🔊 Multiplayer sound played: ${isCorrect ? 'correct' : 'wrong'}`);
+        } catch (error) {
+          console.log('Multiplayer sound failed:', error);
+          // Fallback: try to play a simple beep
+          try {
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            oscillator.frequency.setValueAtTime(isCorrect ? 800 : 400, audioContext.currentTime);
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.2);
+          } catch (fallbackError) {
+            console.log('Fallback sound also failed:', fallbackError);
+          }
+        }
+      }, 150); // Slight delay to ensure state is properly set
     }
 
     // Submit answer to server
@@ -2038,8 +2087,7 @@ const AIQuizArena: React.FC = () => {
                     
                     if (index !== selectedWrongIndex) {
                       return null; // Hide this wrong option
-                    }                  }                  
-                  let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
+                    }                  }                    let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
                   
                   if (showResult) {
                     if (currentSession?.mode === 'multiplayer') {
@@ -2050,16 +2098,16 @@ const AIQuizArena: React.FC = () => {
                           : 'bg-blue-500 border-blue-400 text-white'; // Pending state
                       } else if (isCorrect && multiplayerState.serverResultsReceived) {
                         // Only show correct answer after server confirms
-                        buttonClass = 'bg-green-500/40 border-green-400/40 text-white/70';
+                        buttonClass = 'bg-green-500/40 border-green-400/40 text-green-100';
                       }
                     } else {
-                      // Single-player logic
+                      // Single-player logic - improved highlighting
                       if (isCorrect) {
-                        buttonClass = 'bg-green-500 border-green-400 text-white';
+                        buttonClass = 'bg-green-500 border-green-400 text-white shadow-lg shadow-green-500/25';
                       } else if (isSelected) {
-                        buttonClass = 'bg-red-500 border-red-400 text-white';
+                        buttonClass = 'bg-red-500 border-red-400 text-white shadow-lg shadow-red-500/25';
                       } else {
-                        buttonClass = 'bg-white/10 border-white/30 text-white/70';
+                        buttonClass = 'bg-white/5 border-white/20 text-white/60';
                       }
                     }
                   }
