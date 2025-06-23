@@ -1387,16 +1387,27 @@ const AIQuizArena: React.FC = () => {
       playSound('game-end');
     }
   };  const playSound = (type: string) => {
-    if (!soundEnabled) return;
+    if (!soundEnabled) {
+      console.log(`🔇 Sound disabled, skipping: ${type}`);
+      return;
+    }
+    
+    console.log(`🔊 Attempting to play sound: ${type} [Mode: ${currentSession?.mode || 'menu'}]`);
     
     try {
       // Create audio context and play sound
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+          console.log(`🔊 Audio context resumed for ${type}`);
+        });
+      }
+      
       // Define frequencies for different sound types
       const soundMap = {
-        'correct': 800,
-        'wrong': 400,
+        'correct': 880,
+        'wrong': 220,
         'game-start': 600,
         'game-end': 300,
         'powerup': 1000,
@@ -1417,7 +1428,7 @@ const AIQuizArena: React.FC = () => {
       oscillator.type = type === 'level-up' ? 'square' : type === 'lightning' ? 'sawtooth' : 'sine';
       
       gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
+      gainNode.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.01);
       
       // Special effects for different sounds
       if (type === 'level-up' || type === 'achievement') {
@@ -1435,9 +1446,24 @@ const AIQuizArena: React.FC = () => {
       
       oscillator.start(audioContext.currentTime);
       
-      console.log(`🔊 Playing sound: ${type}`);
+      console.log(`✅ Successfully played sound: ${type} [Mode: ${currentSession?.mode || 'menu'}]`);
     } catch (error) {
-      console.log(`🔇 Sound not available: ${type}`, error);
+      console.log(`❌ Sound playback failed: ${type}`, error);
+      
+      // Enhanced fallback for multiplayer
+      if (currentSession?.mode === 'multiplayer') {
+        console.log(`🔄 Trying multiplayer fallback sound for: ${type}`);
+        try {
+          // Simple beep as fallback
+          const beep = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1O67dSYFKXvM+tOKOAoUXcbs5H9MB');
+          beep.volume = 0.3;
+          beep.play().catch(() => {
+            console.log(`🔇 Audio fallback also failed for: ${type}`);
+          });
+        } catch (fallbackError) {
+          console.log(`🔇 All sound methods failed for: ${type}`, fallbackError);
+        }
+      }
     }
   };
   const resetQuiz = () => {
@@ -1620,31 +1646,46 @@ const AIQuizArena: React.FC = () => {
       console.log(`📚 [Multiplayer] Added question ${question.id} to history. Total: ${updated.size} questions tracked`);
       return updated;
     });
+      // Enhanced multiplayer sound handling with immediate feedback
+    console.log(`🎯 [MULTIPLAYER] Answer selected: ${answerIndex}, Correct: ${question.correctAnswer}, Is Correct: ${isCorrect}`);
     
-    // Improved multiplayer sound handling with delay and better error handling
     if (soundEnabled) {
-      setTimeout(() => {
+      // Play sound immediately without delay for better user experience
+      try {
+        playSound(isCorrect ? 'correct' : 'wrong');
+        console.log(`🔊 [MULTIPLAYER] Sound played immediately: ${isCorrect ? 'correct' : 'wrong'}`);
+      } catch (error) {
+        console.log('Primary multiplayer sound failed, trying fallback:', error);
+        // Enhanced fallback sound system
         try {
-          playSound(isCorrect ? 'correct' : 'wrong');
-          console.log(`🔊 Multiplayer sound played: ${isCorrect ? 'correct' : 'wrong'}`);
-        } catch (error) {
-          console.log('Multiplayer sound failed:', error);
-          // Fallback: try to play a simple beep
-          try {
-            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.frequency.setValueAtTime(isCorrect ? 800 : 400, audioContext.currentTime);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.2);
-          } catch (fallbackError) {
-            console.log('Fallback sound also failed:', fallbackError);
-          }
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          // Better sound frequencies and timing
+          oscillator.frequency.setValueAtTime(isCorrect ? 880 : 220, audioContext.currentTime);
+          oscillator.type = isCorrect ? 'sine' : 'sawtooth';
+          
+          gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+          gainNode.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.01);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+          
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.3);
+          
+          console.log(`🔊 [MULTIPLAYER] Fallback sound played successfully`);
+        } catch (fallbackError) {
+          console.log('All multiplayer sound methods failed:', fallbackError);
+          // Visual feedback as last resort
+          document.body.style.backgroundColor = isCorrect ? '#10b981' : '#ef4444';
+          setTimeout(() => {
+            document.body.style.backgroundColor = '';
+          }, 200);
         }
-      }, 150); // Slight delay to ensure state is properly set
+      }
     }
 
     // Submit answer to server
@@ -1786,9 +1827,7 @@ const AIQuizArena: React.FC = () => {
         inQueue: data.status === 'waiting'
       }));
       toast.success(data.message);
-    });
-
-    socket.on('game-found', (data: any) => {
+    });    socket.on('game-found', (data: any) => {
       setMultiplayerState(prev => ({
         ...prev,
         inQueue: false,
@@ -1796,20 +1835,49 @@ const AIQuizArena: React.FC = () => {
         roomId: data.roomId,
         opponent: data.opponent
       }));
-        // Start the multiplayer game
+        // Start the multiplayer game with enhanced question processing
       const session: QuizSession = {
         id: data.roomId,
         mode: 'multiplayer',
         category: data.category,
-        difficulty: data.difficulty,        questions: data.questions.map((q: any) => ({
-          ...q,
-          explanation: q.explanation || `This question tests your knowledge about ${getCategoryDisplayName(data.category) || 'programming'} concepts.`,
-          points: q.points || calculateQuestionPoints(q.difficulty || 'Medium', 'multiplayer'),
-          timeLimit: q.timeLimit || 30,
-          difficultyRating: q.difficultyRating || calculateDifficultyRating(q.difficulty || 'Medium'),
-          difficulty: q.difficulty || 'Medium',
-          category: getCategoryDisplayName(data.category) || 'Programming'
-        })),
+        difficulty: data.difficulty,        // Enhanced question processing for multiplayer
+        questions: data.questions.map((q: any, index: number) => {
+          // Generate unique IDs for multiplayer questions to prevent history conflicts
+          const questionId = q.id || `mp_${data.roomId}_${index}_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+          
+          // Enhanced explanation generation for multiplayer
+          let explanation = q.explanation;
+          if (!explanation || explanation.trim() === '' || explanation.includes('tests your knowledge of') || explanation.length < 20) {
+            const correctOption = q.options[q.correctAnswer];
+            const categoryName = getCategoryDisplayName(data.category);
+            
+            // Generate detailed multiplayer-specific explanations
+            const explanations: {[key: string]: string} = {
+              'javascript': `In JavaScript multiplayer challenge, "${correctOption}" is correct because it follows ES6+ standards and modern async/await patterns used in competitive programming.`,
+              'react': `In React battle mode, "${correctOption}" demonstrates proper component architecture and state management crucial for scalable applications.`,
+              'algorithms': `For competitive programming, "${correctOption}" provides the optimal algorithmic solution with O(n) or better complexity.`,
+              'databases': `In database challenges, "${correctOption}" ensures ACID compliance and optimal query performance for large-scale systems.`,
+              'python': `In Python competitions, "${correctOption}" leverages Pythonic idioms and built-in data structures most efficiently.`,
+              'security': `In cybersecurity battles, "${correctOption}" implements the strongest defense against common attack vectors.`,
+              'ai': `In AI/ML competitions, "${correctOption}" applies cutting-edge machine learning principles for optimal model performance.`,
+              'webdev': `In web development challenges, "${correctOption}" follows modern best practices for responsive, accessible applications.`
+            };
+            
+            explanation = explanations[data.category] || 
+                         `The correct answer is "${correctOption}". In competitive ${categoryName} challenges, this demonstrates mastery of advanced concepts and industry best practices.`;
+          }
+          
+          return {
+            ...q,
+            id: questionId,
+            explanation,
+            points: q.points || calculateQuestionPoints(q.difficulty || 'Medium', 'multiplayer'),
+            timeLimit: q.timeLimit || 30,
+            difficultyRating: q.difficultyRating || calculateDifficultyRating(q.difficulty || 'Medium'),
+            difficulty: q.difficulty || 'Medium',
+            category: getCategoryDisplayName(data.category) || 'Programming'
+          };
+        }),
         currentQuestionIndex: 0,
         score: 0,
         lives: 1,
@@ -1828,14 +1896,28 @@ const AIQuizArena: React.FC = () => {
       setSelectedAnswer(null);
       setShowExplanation(false);
       
-      // Save questions to history to prevent repetition
+      // Add multiplayer questions to history IMMEDIATELY to prevent server-side repeats
       const newQuestionIds = session.questions.map(q => q.id).filter(id => id && !questionHistory.has(id));
       if (newQuestionIds.length > 0) {
-        setQuestionHistory(prev => new Set([...prev, ...newQuestionIds]));
-        console.log(`📚 Added ${newQuestionIds.length} new questions to history`);
+        setQuestionHistory(prev => {
+          const updated = new Set([...prev, ...newQuestionIds]);
+          console.log(`📚 [MULTIPLAYER] Added ${newQuestionIds.length} questions to history preventively`);
+          console.log(`📚 [MULTIPLAYER] Updated history size: ${updated.size} questions tracked`);
+          return updated;
+        });
       }
       
-      toast.success(`Game found! Playing against ${data.opponent.name}`);
+      toast.success(`🎮 Battle Arena! Playing against ${data.opponent.name}`);
+      
+      // Play multiplayer start sound
+      if (soundEnabled) {
+        try {
+          playSound('game-start');
+          console.log(`🔊 [MULTIPLAYER] Game start sound played`);
+        } catch (error) {
+          console.log('Multiplayer start sound failed:', error);
+        }
+      }
     });
 
     socket.on('opponent-answered', (data: any) => {
@@ -1847,6 +1929,14 @@ const AIQuizArena: React.FC = () => {
       const { results, correctAnswer, explanation } = data;
       const myResult = results.find((r: any) => r.playerId === user?.id);
       const opponentResult = results.find((r: any) => r.playerId !== user?.id);
+      
+      console.log(`🎯 [MULTIPLAYER] Question results received:`, {
+        myResult,
+        opponentResult,
+        correctAnswer,
+        explanation,
+        hasExplanation: !!explanation
+      });
       
       // Update our session with the correct score from server
       if (myResult && currentSession) {
@@ -1864,19 +1954,52 @@ const AIQuizArena: React.FC = () => {
         serverResultsReceived: true
       }));
 
-      // Show result feedback with explanation
+      // Enhanced result feedback with sound
       if (myResult) {
         const message = myResult.isCorrect 
-          ? `✅ Correct! +${myResult.points} points`
-          : `❌ Wrong. Correct answer: ${String.fromCharCode(65 + correctAnswer)}`;
+          ? `🎯 Correct! +${myResult.points} points`
+          : `❌ Wrong. Correct: ${String.fromCharCode(65 + correctAnswer)}`;
         toast.success(message);
+        
+        // Play result sound
+        if (soundEnabled) {
+          try {
+            playSound(myResult.isCorrect ? 'correct' : 'wrong');
+            console.log(`🔊 [MULTIPLAYER] Result sound played: ${myResult.isCorrect ? 'correct' : 'wrong'}`);
+          } catch (error) {
+            console.log('Multiplayer result sound failed:', error);
+          }
+        }
       }
 
-      // Force show explanation for multiplayer
-      setTimeout(() => {
-        setShowExplanation(true);
-      }, 500);
-    });    socket.on('next-question', (data: any) => {
+      // Enhanced explanation handling for multiplayer
+      if (currentSession && currentSession.questions[currentSession.currentQuestionIndex]) {
+        const currentQuestion = currentSession.questions[currentSession.currentQuestionIndex];
+        
+        // Update question with server explanation if available
+        if (explanation && explanation.trim() !== '') {
+          setCurrentSession(prev => {
+            if (!prev) return null;
+            const updatedQuestions = [...prev.questions];
+            updatedQuestions[prev.currentQuestionIndex] = {
+              ...updatedQuestions[prev.currentQuestionIndex],
+              explanation: explanation
+            };
+            return {
+              ...prev,
+              questions: updatedQuestions
+            };
+          });
+          console.log(`📝 [MULTIPLAYER] Updated question explanation from server`);
+        }
+        
+        // Force show explanation for multiplayer with shorter delay
+        setTimeout(() => {
+          setShowExplanation(true);
+          console.log(`📖 [MULTIPLAYER] Explanation shown for multiplayer`);
+        }, 300);
+      }
+    });socket.on('next-question', (data: any) => {
       if (currentSession) {
         setCurrentSession(prev => prev ? {
           ...prev,
@@ -2182,15 +2305,15 @@ const AIQuizArena: React.FC = () => {
                     if (index !== selectedWrongIndex) {
                       return null; // Hide this wrong option
                     }                  }                  let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white transition-all duration-300';
-                  let buttonStyle: React.CSSProperties = {};
-                    if (showResult) {
-                    console.log(`🎨 BUTTON STYLING DEBUG:`, {
+                  let buttonStyle: React.CSSProperties = {};                  if (showResult) {
+                    console.log(`🎨 BUTTON STYLING DEBUG [${currentSession?.mode === 'multiplayer' ? 'MULTIPLAYER' : 'SINGLE PLAYER'}]:`, {
                       optionIndex: index,
                       isCorrect,
                       isSelected,
                       showResult,
                       selectedAnswer,
-                      correctAnswer: question.correctAnswer
+                      correctAnswer: question.correctAnswer,
+                      gameMode: currentSession?.mode
                     });
                     
                     if (isCorrect) {
@@ -2202,7 +2325,7 @@ const AIQuizArena: React.FC = () => {
                         color: '#ffffff !important',
                         boxShadow: '0 10px 25px rgba(16, 185, 129, 0.25)'
                       };
-                      console.log(`✅ Applied GREEN styling to correct answer (option ${index})`);
+                      console.log(`✅ Applied GREEN styling to correct answer (option ${index}) [${currentSession?.mode?.toUpperCase()}]`);
                     } else if (isSelected) {
                       // Highlight selected wrong answer in red
                       buttonClass = 'text-white shadow-lg transition-all duration-300';
@@ -2212,7 +2335,7 @@ const AIQuizArena: React.FC = () => {
                         color: '#ffffff !important',
                         boxShadow: '0 10px 25px rgba(239, 68, 68, 0.25)'
                       };
-                      console.log(`❌ Applied RED styling to wrong selected answer (option ${index})`);
+                      console.log(`❌ Applied RED styling to wrong selected answer (option ${index}) [${currentSession?.mode?.toUpperCase()}]`);
                     } else {
                       // Dim other unselected answers
                       buttonClass = 'text-white/60 transition-all duration-300';
@@ -2221,7 +2344,7 @@ const AIQuizArena: React.FC = () => {
                         borderColor: 'rgba(255, 255, 255, 0.2)',
                         color: 'rgba(255, 255, 255, 0.6)'
                       };
-                      console.log(`⚪ Applied DIM styling to unselected answer (option ${index})`);
+                      console.log(`⚪ Applied DIM styling to unselected answer (option ${index}) [${currentSession?.mode?.toUpperCase()}]`);
                     }
                   }
                   
@@ -2497,21 +2620,49 @@ const AIQuizArena: React.FC = () => {
                     className="border-orange-400/30 text-orange-300 hover:bg-orange-500/20"
                   >
                     Clear Question History ({questionHistory.size})
-                  </Button>
-                  <Button
+                  </Button>                  <Button
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      console.log('=== DEBUG INFO ===');
                       console.log('Current game mode:', gameMode);
                       console.log('Current session:', currentSession);
                       console.log('Selected answer:', selectedAnswer);
                       console.log('Show explanation:', showExplanation);
                       console.log('Question history size:', questionHistory.size);
+                      console.log('Sound enabled:', soundEnabled);
+                      console.log('Multiplayer state:', multiplayerState);
+                      console.log('Socket connected:', socket?.connected);
+                      console.log('Current question:', getCurrentQuestion());
+                      console.log('Active power-ups:', activePowerUps);
+                      console.log('=== END DEBUG ===');
                       toast.success('Debug info logged to console');
                     }}
                     className="border-orange-400/30 text-orange-300 hover:bg-orange-500/20"
                   >
                     Log Debug Info
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (currentSession?.mode === 'multiplayer') {
+                        console.log('=== MULTIPLAYER DEBUG ===');
+                        console.log('Multiplayer state:', multiplayerState);
+                        console.log('Socket status:', socket?.connected ? 'Connected' : 'Disconnected');
+                        console.log('Current MP question:', getCurrentQuestion());
+                        console.log('Selected answer:', selectedAnswer);
+                        console.log('Show explanation:', showExplanation);
+                        console.log('Sound enabled:', soundEnabled);
+                        console.log('=== END MP DEBUG ===');
+                        toast.success('Multiplayer debug logged');
+                      } else {
+                        toast.error('Not in multiplayer mode');
+                      }
+                    }}
+                    className="border-purple-400/30 text-purple-300 hover:bg-purple-500/20"
+                  >
+                    MP Debug
                   </Button>
                   <div className="text-xs opacity-80">
                     Testing tools - Check console for debug info
