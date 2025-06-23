@@ -198,6 +198,7 @@ const AIQuizArena: React.FC = () => {
     fiftyFifty: false,
     usedFiftyFiftyQuestions: new Set()
   });  const [questionHistory, setQuestionHistory] = useState<Set<string>>(new Set());
+  const [currentSessionQuestions, setCurrentSessionQuestions] = useState<Set<string>>(new Set());
   const [playerStats, setPlayerStats] = useState<PlayerProgress>({
     level: 1,
     xp: 0,
@@ -916,8 +917,7 @@ const AIQuizArena: React.FC = () => {
           console.log(`❌ Question ${q.id} already in history, filtering out`);
           return false;
         }
-        
-        // Also check for similar question content to prevent near-duplicates
+          // Also check for similar question content to prevent near-duplicates
         const isContentSimilar = historyArray.some(historyId => {
           const historyQuestion = processedQuestions.find(pq => pq.id === historyId);
           if (!historyQuestion) return false;
@@ -930,6 +930,12 @@ const AIQuizArena: React.FC = () => {
           }
           return false;
         });
+        
+        // Also check if it's already in current session
+        if (currentSessionQuestions.has(q.id)) {
+          console.log(`❌ Question ${q.id} already in current session, filtering out`);
+          return false;
+        }
         
         if (isContentSimilar) return false;
         
@@ -976,13 +982,15 @@ const AIQuizArena: React.FC = () => {
         totalTimeUsed: 0,
         bonusMultiplier: 1,
         levelProgression: 0
-      };
-
-      setCurrentSession(session);
+      };      setCurrentSession(session);
       setTimeLeft(session.questions[0]?.timeLimit || (mode === 'speed' ? 10 : 30));
       setGameMode('playing');
       setSelectedAnswer(null);
       setShowExplanation(false);
+      
+      // Reset session-specific question tracking for new quiz
+      setCurrentSessionQuestions(new Set(finalQuestions.map(q => q.id)));
+      console.log(`🎯 Started new quiz session with ${finalQuestions.length} questions tracked`);
       
       // Reset active power-ups for new quiz
       setActivePowerUps({
@@ -1053,17 +1061,22 @@ const AIQuizArena: React.FC = () => {
   };  const handleAnswerSelect = (answerIndex: number) => {
     if (selectedAnswer !== null || !currentSession) return;
     
+    const question = currentSession.questions[currentSession.currentQuestionIndex];
+    const isCorrect = answerIndex === question.correctAnswer;
+    
     console.log(`🎯 ANSWER SELECTION DEBUG:`, {
       answerIndex,
-      correctAnswer: currentSession.questions[currentSession.currentQuestionIndex].correctAnswer,
-      isCorrect: answerIndex === currentSession.questions[currentSession.currentQuestionIndex].correctAnswer,
-      questionId: currentSession.questions[currentSession.currentQuestionIndex].id
+      correctAnswer: question.correctAnswer,
+      isCorrect,
+      questionId: question.id,
+      questionText: question.question.substring(0, 50) + '...',
+      selectedOption: question.options[answerIndex],
+      correctOption: question.options[question.correctAnswer]
     });
     
     setSelectedAnswer(answerIndex);
-    const question = currentSession.questions[currentSession.currentQuestionIndex];
-    const isCorrect = answerIndex === question.correctAnswer;
-      // Add this question to history now that it's been answered
+    
+    // Add this question to history now that it's been answered
     setQuestionHistory(prev => {
       const updated = new Set([...prev, question.id]);
       console.log(`📚 Added question ${question.id} to history. Total: ${updated.size} questions tracked`);
@@ -1071,8 +1084,8 @@ const AIQuizArena: React.FC = () => {
       return updated;
     });
     
-    console.log(`🎯 Answer selected: ${answerIndex}, Correct: ${question.correctAnswer}, Is Correct: ${isCorrect}`);
-    console.log(`🎨 Button colors should be: ${isCorrect ? 'GREEN for correct' : 'RED for wrong'}`);
+    console.log(`🎯 Final Answer Verification: Selected ${answerIndex}, Correct: ${question.correctAnswer}, Is Correct: ${isCorrect}`);
+    console.log(`🎨 Colors should show: ${isCorrect ? 'GREEN for correct' : 'RED for wrong'}, and GREEN for option ${question.correctAnswer}`);
     
     if (soundEnabled) {
       playSound(isCorrect ? 'correct' : 'wrong');
@@ -1377,16 +1390,16 @@ const AIQuizArena: React.FC = () => {
       console.error('Error recording quiz completion:', error);
     }
   };
-
   const endQuiz = () => {
     if (currentSession) {
       recordQuizCompletion(currentSession);
     }
     setGameMode('results');
+    setCurrentSessionQuestions(new Set()); // Clear current session questions
     if (soundEnabled) {
       playSound('game-end');
     }
-  };  const playSound = (type: string) => {
+  };const playSound = (type: string) => {
     if (!soundEnabled) {
       console.log(`🔇 Sound disabled, skipping: ${type}`);
       return;
@@ -1465,20 +1478,20 @@ const AIQuizArena: React.FC = () => {
         }
       }
     }
-  };
-  const resetQuiz = () => {
+  };  const resetQuiz = () => {
     setCurrentSession(null);
     setGameMode('menu');
     setSelectedAnswer(null);
     setShowExplanation(false);
     setTimeLeft(0);
+    setCurrentSessionQuestions(new Set()); // Clear current session questions when returning to menu
   };
-
   const clearQuestionHistory = () => {
     const userId = user?.id;
     if (userId) {
       localStorage.removeItem(`quiz_history_${userId}`);
       setQuestionHistory(new Set());
+      setCurrentSessionQuestions(new Set()); // Also clear current session
       toast.success('Question history cleared! You can now see all questions again.');
       console.log('🗑️ Question history cleared');
     }
@@ -2315,34 +2328,37 @@ const AIQuizArena: React.FC = () => {
                       correctAnswer: question.correctAnswer,
                       gameMode: currentSession?.mode
                     });
-                    
-                    if (isCorrect) {
-                      // Always highlight correct answer in green
-                      buttonClass = 'text-white shadow-lg transition-all duration-300';
+                      if (isCorrect) {
+                      // Always highlight correct answer in green - use more specific styling
+                      buttonClass = 'text-white shadow-lg transition-all duration-300 !border-green-500';
                       buttonStyle = {
-                        backgroundColor: '#10b981 !important',
-                        borderColor: '#059669 !important',
-                        color: '#ffffff !important',
-                        boxShadow: '0 10px 25px rgba(16, 185, 129, 0.25)'
+                        backgroundColor: '#10b981',
+                        borderColor: '#059669',
+                        borderWidth: '2px',
+                        color: '#ffffff',
+                        boxShadow: '0 10px 25px rgba(16, 185, 129, 0.25)',
+                        outline: 'none'
                       };
                       console.log(`✅ Applied GREEN styling to correct answer (option ${index}) [${currentSession?.mode?.toUpperCase()}]`);
                     } else if (isSelected) {
-                      // Highlight selected wrong answer in red
-                      buttonClass = 'text-white shadow-lg transition-all duration-300';
+                      // Highlight selected wrong answer in red - use more specific styling
+                      buttonClass = 'text-white shadow-lg transition-all duration-300 !border-red-500';
                       buttonStyle = {
-                        backgroundColor: '#ef4444 !important',
-                        borderColor: '#dc2626 !important',
-                        color: '#ffffff !important',
-                        boxShadow: '0 10px 25px rgba(239, 68, 68, 0.25)'
+                        backgroundColor: '#ef4444',
+                        borderColor: '#dc2626',
+                        borderWidth: '2px',
+                        color: '#ffffff',
+                        boxShadow: '0 10px 25px rgba(239, 68, 68, 0.25)',
+                        outline: 'none'
                       };
                       console.log(`❌ Applied RED styling to wrong selected answer (option ${index}) [${currentSession?.mode?.toUpperCase()}]`);
-                    } else {
-                      // Dim other unselected answers
+                    } else {                      // Dim other unselected answers
                       buttonClass = 'text-white/60 transition-all duration-300';
                       buttonStyle = {
                         backgroundColor: 'rgba(255, 255, 255, 0.05)',
                         borderColor: 'rgba(255, 255, 255, 0.2)',
-                        color: 'rgba(255, 255, 255, 0.6)'
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        outline: 'none'
                       };
                       console.log(`⚪ Applied DIM styling to unselected answer (option ${index}) [${currentSession?.mode?.toUpperCase()}]`);
                     }
@@ -2641,8 +2657,7 @@ const AIQuizArena: React.FC = () => {
                     className="border-orange-400/30 text-orange-300 hover:bg-orange-500/20"
                   >
                     Log Debug Info
-                  </Button>
-                  <Button
+                  </Button>                  <Button
                     variant="outline"
                     size="sm"
                     onClick={() => {
@@ -2663,6 +2678,48 @@ const AIQuizArena: React.FC = () => {
                     className="border-purple-400/30 text-purple-300 hover:bg-purple-500/20"
                   >
                     MP Debug
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const currentQuestion = getCurrentQuestion();
+                      if (currentQuestion) {
+                        console.log('=== BUTTON COLOR DEBUG ===');
+                        console.log('Current question:', currentQuestion.question);
+                        console.log('Options:', currentQuestion.options);
+                        console.log('Correct answer index:', currentQuestion.correctAnswer);
+                        console.log('Correct answer text:', currentQuestion.options[currentQuestion.correctAnswer]);
+                        console.log('Selected answer index:', selectedAnswer);
+                        console.log('Selected answer text:', selectedAnswer !== null ? currentQuestion.options[selectedAnswer] : 'None');
+                        console.log('Show result:', selectedAnswer !== null);
+                        console.log('Button colors should be:');
+                        currentQuestion.options.forEach((option, index) => {
+                          const isCorrect = index === currentQuestion.correctAnswer;
+                          const isSelected = selectedAnswer === index;
+                          const showResult = selectedAnswer !== null;
+                          if (showResult) {
+                            if (isCorrect) {
+                              console.log(`  Option ${index} (${option}): GREEN (correct answer)`);
+                            } else if (isSelected) {
+                              console.log(`  Option ${index} (${option}): RED (wrong selected)`);
+                            } else {
+                              console.log(`  Option ${index} (${option}): DIM (unselected)`);
+                            }
+                          } else {
+                            console.log(`  Option ${index} (${option}): DEFAULT (not answered yet)`);
+                          }
+                        });
+                        console.log('=== END BUTTON DEBUG ===');
+                        toast.success('Button color debug logged');
+                      } else {
+                        console.log('No current question available');
+                        toast.error('No question to debug');
+                      }
+                    }}
+                    className="border-pink-400/30 text-pink-300 hover:bg-pink-500/20"
+                  >
+                    Button Debug
                   </Button>
                   <div className="text-xs opacity-80">
                     Testing tools - Check console for debug info
