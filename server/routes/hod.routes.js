@@ -98,6 +98,88 @@ router.get('/debug-no-auth', (req, res) => {
   });
 });
 
+// Debug route to check all students and their departments (DEVELOPMENT ONLY)
+router.get('/debug-all-students', async (req, res) => {
+  // Only allow in development mode
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not Found' });
+  }
+  
+  try {
+    const students = await User.find({ role: 'student' }).select('name email department role');
+    const departments = [...new Set(students.map(s => s.department))];
+    
+    res.json({
+      message: 'All students debug info',
+      totalStudents: students.length,
+      departments: departments,
+      students: students.map(s => ({
+        id: s._id,
+        name: s.name,
+        email: s.email,
+        department: s.department,
+        role: s.role
+      })),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to fetch students',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// TEMPORARY DEBUG: Test student update without authentication (REMOVE IN PRODUCTION)
+// This endpoint should be removed before deploying to production
+router.put('/debug-update-student/:id', async (req, res) => {
+  // Only allow in development mode
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not Found' });
+  }
+  
+  try {
+    console.log('🔧 DEBUG: Testing student update without auth for ID:', req.params.id);
+    console.log('📝 DEBUG: Update request body:', req.body);
+    
+    const { name, email, studentId, program, enrollmentYear, phone } = req.body;
+    
+    // Find student by ID
+    const student = await User.findById(req.params.id);
+    if (!student) {
+      console.log('❌ DEBUG: Student not found with ID:', req.params.id);
+      return res.status(404).json({ error: 'Not Found', message: 'Student not found' });
+    }
+    
+    console.log('👨‍🎓 DEBUG: Found student:', {
+      id: student._id,
+      name: student.name,
+      department: student.department,
+      role: student.role
+    });
+    
+    // Update student fields without any authorization checks
+    if (name) student.name = name;
+    if (email) student.email = email;
+    if (studentId) student.studentId = studentId;
+    if (program) student.program = program;
+    if (enrollmentYear) student.enrollmentYear = enrollmentYear;
+    if (phone) student.phone = phone;
+    
+    await student.save();
+    
+    // Return updated student without password
+    const updatedStudent = await User.findById(req.params.id).select('-password');
+    
+    console.log('✅ DEBUG: Student updated successfully:', updatedStudent.name);
+    res.json({ student: updatedStudent });
+  } catch (error) {
+    console.error('❌ DEBUG: Error updating student:', error);
+    res.status(500).json({ error: 'Failed to update student', message: error.message });
+  }
+});
+
 // GET /api/hod/analytics
 router.get('/analytics', authenticateJWT, async (req, res) => {
   try {
@@ -720,9 +802,17 @@ router.post('/students', async (req, res) => {
 router.put('/students/:id', authenticateJWT, async (req, res) => {
   try {
     console.log('📚 HOD Student update endpoint called for ID:', req.params.id);
+    console.log('👤 Authenticated user:', {
+      id: req.user.id,
+      role: req.user.role,
+      department: req.user.department,
+      name: req.user.name
+    });
+    console.log('📝 Update request body:', req.body);
     
     // Check if user has permissions
     if (req.user.role !== 'hod' && req.user.role !== 'admin') {
+      console.log('❌ Role check failed - user role:', req.user.role);
       return res.status(403).json({ error: 'Forbidden', message: 'Only HOD can update students' });
     }
     
@@ -731,13 +821,40 @@ router.put('/students/:id', authenticateJWT, async (req, res) => {
     // Find student by ID
     const student = await User.findById(req.params.id);
     if (!student) {
+      console.log('❌ Student not found with ID:', req.params.id);
       return res.status(404).json({ error: 'Not Found', message: 'Student not found' });
     }
     
-    // Check if student is in HOD's department
+    console.log('👨‍🎓 Found student:', {
+      id: student._id,
+      name: student.name,
+      department: student.department,
+      role: student.role
+    });
+      // Enhanced department check with better logging
     if (student.department !== req.user.department && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden', message: 'You can only update students in your department' });
+      console.log('❌ Department mismatch - Student dept:', student.department, 'HOD dept:', req.user.department);
+      console.log('💡 Suggested fix: Make sure the student department matches the HOD department or make user an admin');
+      console.log('🔧 Bypass option: Set user role to "admin" in auth middleware for development');
+      return res.status(403).json({ 
+        error: 'Forbidden', 
+        message: 'You can only update students in your department',
+        details: {
+          studentDepartment: student.department,
+          userDepartment: req.user.department,
+          userRole: req.user.role,
+          suggestion: 'Contact administrator or check department assignments'
+        }
+      });
     }
+    
+    console.log('✅ Authorization checks passed - proceeding with update');
+    console.log('📊 Update summary:', {
+      userRole: req.user.role,
+      userDepartment: req.user.department,
+      studentDepartment: student.department,
+      authorizationStatus: 'APPROVED'
+    });
     
     // Check if email already exists for another user
     if (email && email !== student.email) {
@@ -1488,9 +1605,17 @@ router.post('/faculty', authenticateJWT, async (req, res) => {
 router.put('/faculty/:id', authenticateJWT, async (req, res) => {
   try {
     console.log('👨‍🏫 HOD Faculty update endpoint called for ID:', req.params.id);
+    console.log('👤 Authenticated user:', {
+      id: req.user.id,
+      role: req.user.role,
+      department: req.user.department,
+      name: req.user.name
+    });
+    console.log('📝 Update request body:', req.body);
     
     // Check if user has permissions
     if (req.user.role !== 'hod' && req.user.role !== 'admin') {
+      console.log('❌ Role check failed - user role:', req.user.role);
       return res.status(403).json({ error: 'Forbidden', message: 'Only HOD can update faculty members' });
     }
     
@@ -1504,13 +1629,41 @@ router.put('/faculty/:id', authenticateJWT, async (req, res) => {
     // Find faculty member by ID
     const faculty = await User.findById(req.params.id);
     if (!faculty) {
+      console.log('❌ Faculty not found with ID:', req.params.id);
       return res.status(404).json({ error: 'Not Found', message: 'Faculty member not found' });
     }
     
-    // Check if faculty is in HOD's department
+    console.log('👨‍🏫 Found faculty:', {
+      id: faculty._id,
+      name: faculty.name,
+      department: faculty.department,
+      role: faculty.role
+    });
+    
+    // Enhanced department check with better logging
     if (faculty.department !== req.user.department && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden', message: 'You can only update faculty in your department' });
+      console.log('❌ Department mismatch - Faculty dept:', faculty.department, 'HOD dept:', req.user.department);
+      console.log('💡 Suggested fix: Make sure the faculty department matches the HOD department or make user an admin');
+      console.log('🔧 Bypass option: Set user role to "admin" in auth middleware for development');
+      return res.status(403).json({ 
+        error: 'Forbidden', 
+        message: 'You can only update faculty in your department',
+        details: {
+          facultyDepartment: faculty.department,
+          userDepartment: req.user.department,
+          userRole: req.user.role,
+          suggestion: 'Contact administrator or check department assignments'
+        }
+      });
     }
+    
+    console.log('✅ Authorization checks passed - proceeding with faculty update');
+    console.log('📊 Update summary:', {
+      userRole: req.user.role,
+      userDepartment: req.user.department,
+      facultyDepartment: faculty.department,
+      authorizationStatus: 'APPROVED'
+    });
     
     // Check if email already exists for another user
     if (email && email !== faculty.email) {

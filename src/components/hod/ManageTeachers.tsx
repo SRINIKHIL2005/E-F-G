@@ -133,8 +133,7 @@ const ManageTeachers: React.FC<ManageTeachersProps> = ({ department, onDataChang
       toast.error(error.response?.data?.message || 'Failed to add teacher');
     } finally {
       setIsLoading(false);
-    }
-  };
+    }  };
 
   // Handle faculty update
   const handleUpdateTeacher = async () => {
@@ -145,11 +144,22 @@ const ManageTeachers: React.FC<ManageTeachersProps> = ({ department, onDataChang
 
     setIsLoading(true);
     try {
+      console.log('🔄 Attempting to update teacher:', {
+        teacherId: selectedTeacher._id,
+        teacherName: selectedTeacher.name,
+        teacherDepartment: selectedTeacher.department,
+        updateData: {
+          ...formData,
+          specialization: formData.specialization.filter(s => s.trim() !== '')
+        }
+      });
+      
       const response = await apiClient.put(`/api/hod/faculty/${selectedTeacher._id}`, {
         ...formData,
         specialization: formData.specialization.filter(s => s.trim() !== '')
       });
-        setFaculty(faculty.map(teacher => 
+      
+      setFaculty(faculty.map(teacher => 
         teacher._id === selectedTeacher._id ? response.data.faculty : teacher
       ));
       
@@ -163,7 +173,21 @@ const ManageTeachers: React.FC<ManageTeachersProps> = ({ department, onDataChang
       }
     } catch (error: any) {
       console.error('Error updating teacher:', error);
-      toast.error(error.response?.data?.message || 'Failed to update teacher');
+      console.error('Error response data:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      
+      // Enhanced error handling with more details
+      if (error.response?.status === 403) {
+        const errorDetails = error.response?.data?.details;
+        if (errorDetails) {
+          console.log('🚫 Authorization failed - Details:', errorDetails);
+          toast.error(`Access denied: ${error.response?.data?.message || 'Insufficient permissions'}`);
+        } else {
+          toast.error('Access denied: You do not have permission to update this teacher');
+        }
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to update teacher');
+      }
     } finally {
       setIsLoading(false);
     }

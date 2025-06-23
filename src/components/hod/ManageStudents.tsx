@@ -166,7 +166,6 @@ const ManageStudents: React.FC<ManageStudentsProps> = ({ department, onDataChang
       setIsLoading(false);
     }
   };
-
   // Handle student update
   const handleUpdateStudent = async () => {
     if (!selectedStudent || !formData.name || !formData.email) {
@@ -176,8 +175,16 @@ const ManageStudents: React.FC<ManageStudentsProps> = ({ department, onDataChang
 
     setIsLoading(true);
     try {
+      console.log('🔄 Attempting to update student:', {
+        studentId: selectedStudent._id,
+        studentName: selectedStudent.name,
+        studentDepartment: selectedStudent.department,
+        updateData: formData
+      });
+      
       const response = await apiClient.put(`/api/hod/students/${selectedStudent._id}`, formData);
-        setStudents(students.map(student => 
+      
+      setStudents(students.map(student => 
         student._id === selectedStudent._id ? response.data.student : student
       ));
       
@@ -191,7 +198,21 @@ const ManageStudents: React.FC<ManageStudentsProps> = ({ department, onDataChang
       }
     } catch (error: any) {
       console.error('Error updating student:', error);
-      toast.error(error.response?.data?.message || 'Failed to update student');
+      console.error('Error response data:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      
+      // Enhanced error handling with more details
+      if (error.response?.status === 403) {
+        const errorDetails = error.response?.data?.details;
+        if (errorDetails) {
+          console.log('🚫 Authorization failed - Details:', errorDetails);
+          toast.error(`Access denied: ${error.response?.data?.message || 'Insufficient permissions'}`);
+        } else {
+          toast.error('Access denied: You do not have permission to update this student');
+        }
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to update student');
+      }
     } finally {
       setIsLoading(false);
     }

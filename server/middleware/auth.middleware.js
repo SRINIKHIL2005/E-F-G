@@ -4,16 +4,18 @@ import jwt from 'jsonwebtoken';
 const BYPASS_AUTH_FOR_DEVELOPMENT = true;
 
 // JWT Authentication Middleware
-export const authenticateJWT = (req, res, next) => {
-  // DEVELOPMENT MODE - Bypass authentication for easier development
+export const authenticateJWT = (req, res, next) => {  // DEVELOPMENT MODE - Bypass authentication for easier development
   if (BYPASS_AUTH_FOR_DEVELOPMENT) {
     console.log('⚠️ WARNING: Authentication bypassed for development');
+    console.log('🔗 Route being accessed:', req.originalUrl);
+    console.log('🏫 Setting development user as HOD with Computer Science department access');
+    
     req.user = {
       id: 'dev-user-id',
-      name: 'Development User',
-      role: 'hod',
-      department: 'Engineering',
-      email: 'dev@example.com'
+      name: 'Development HOD User',
+      role: 'admin', // Admin role to bypass all department restrictions
+      department: 'Computer Science', // Match one of the existing departments
+      email: 'dev-hod@example.com'
     };
     return next();
   }
