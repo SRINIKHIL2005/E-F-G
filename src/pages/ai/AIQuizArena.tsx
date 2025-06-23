@@ -840,11 +840,12 @@ const AIQuizArena: React.FC = () => {
         throw new Error('No valid questions found in response');
       }      // Add explanations and ensure proper structure for all questions
       const processedQuestions = validQuestions.map((q, index) => {
-        let explanation = q.explanation;
-          // Generate better explanations if needed
+        let explanation = q.explanation;        // Generate better explanations if needed
         if (!explanation || explanation.trim() === '' || explanation.includes('tests your knowledge of') || explanation.length < 10) {
           const correctOption = q.options[q.correctAnswer];
           const categoryName = getCategoryDisplayName(category);
+          
+          console.log(`🔧 Generating explanation for category: ${categoryName}, correct answer: ${correctOption}`);
           
           const categoryExplanations: {[key: string]: string} = {
             'javascript mastery': `In JavaScript, "${correctOption}" is the correct answer because it follows proper syntax and best practices for modern JavaScript development.`,
@@ -867,14 +868,25 @@ const AIQuizArena: React.FC = () => {
           points: q.points || calculateQuestionPoints(q.difficulty || 'Medium', mode),
           timeLimit: q.timeLimit || (mode === 'speed' ? 15 : mode === 'survival' ? 20 : 30),
           category: getCategoryDisplayName(category),
-          id: q.id || `${category}_${mode}_${Date.now()}_${index}`,
+          id: q.id || `${category}_${mode}_${Date.now()}_${Math.random().toString(36).substring(2)}_${index}`,
           difficultyRating: q.difficultyRating || calculateDifficultyRating(q.difficulty || 'Medium'),
           tags: q.tags || [category],
           topicLevel: q.topicLevel || Math.min(Math.floor(playerStats.level / 3) + 1, 5)
         };
       });      // Filter out questions that were recently asked - improve repeat prevention
       const historyArray = Array.from(questionHistory);
-      let freshQuestions = processedQuestions.filter(q => !historyArray.includes(q.id));
+      console.log(`🔍 Checking ${processedQuestions.length} questions against history of ${historyArray.length} questions`);
+      console.log(`📝 Question IDs in history:`, historyArray.slice(0, 5).join(', ') + (historyArray.length > 5 ? '...' : ''));
+      
+      let freshQuestions = processedQuestions.filter(q => {
+        const isFresh = !historyArray.includes(q.id);
+        if (!isFresh) {
+          console.log(`❌ Question ${q.id} already in history, filtering out`);
+        } else {
+          console.log(`✅ Question ${q.id} is fresh`);
+        }
+        return isFresh;
+      });
       
       if (freshQuestions.length < questionCount) {
         console.log(`🔄 Only ${freshQuestions.length} fresh questions available, need ${questionCount}. Adding older questions.`);
@@ -995,13 +1007,16 @@ const AIQuizArena: React.FC = () => {
     setSelectedAnswer(answerIndex);
     const question = currentSession.questions[currentSession.currentQuestionIndex];
     const isCorrect = answerIndex === question.correctAnswer;
-    
-    // Add this question to history now that it's been answered
+      // Add this question to history now that it's been answered
     setQuestionHistory(prev => {
       const updated = new Set([...prev, question.id]);
       console.log(`📚 Added question ${question.id} to history. Total: ${updated.size} questions tracked`);
+      console.log(`📚 Updated history:`, Array.from(updated).slice(-3).join(', '));
       return updated;
     });
+    
+    console.log(`🎯 Answer selected: ${answerIndex}, Correct: ${question.correctAnswer}, Is Correct: ${isCorrect}`);
+    console.log(`🎨 Button colors should be: ${isCorrect ? 'GREEN for correct' : 'RED for wrong'}`);
     
     if (soundEnabled) {
       playSound(isCorrect ? 'correct' : 'wrong');
@@ -2111,14 +2126,13 @@ const AIQuizArena: React.FC = () => {
                     if (index !== selectedWrongIndex) {
                       return null; // Hide this wrong option
                     }                  }                  let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
-                  
-                  if (showResult) {
+                    if (showResult) {
                     if (isCorrect) {
-                      // Always highlight correct answer in green
-                      buttonClass = 'bg-green-500 border-green-400 text-white shadow-lg shadow-green-500/25';
+                      // Always highlight correct answer in green with !important
+                      buttonClass = '!bg-green-500 !border-green-400 !text-white shadow-lg shadow-green-500/25';
                     } else if (isSelected) {
-                      // Highlight selected wrong answer in red
-                      buttonClass = 'bg-red-500 border-red-400 text-white shadow-lg shadow-red-500/25';
+                      // Highlight selected wrong answer in red with !important
+                      buttonClass = '!bg-red-500 !border-red-400 !text-white shadow-lg shadow-red-500/25';
                     } else {
                       // Dim other unselected answers
                       buttonClass = 'bg-white/5 border-white/20 text-white/60';
@@ -2132,7 +2146,13 @@ const AIQuizArena: React.FC = () => {
                       whileTap={{ scale: 0.98 }}
                     >                      <Button
                         variant="outline"
-                        className={`w-full h-auto p-4 text-left justify-start ${buttonClass}`}                        onClick={() => {
+                        className={`w-full h-auto p-4 text-left justify-start ${buttonClass}`}
+                        style={showResult ? {
+                          backgroundColor: isCorrect ? '#10b981 !important' : isSelected ? '#ef4444 !important' : undefined,
+                          borderColor: isCorrect ? '#059669 !important' : isSelected ? '#dc2626 !important' : undefined,
+                          color: showResult ? '#ffffff !important' : undefined
+                        } : undefined}
+                        onClick={() => {
                           if (currentSession?.mode === 'multiplayer') {
                             handleMultiplayerAnswerSelect(index); 
                           } else {
