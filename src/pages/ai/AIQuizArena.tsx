@@ -127,6 +127,23 @@ interface LeaderboardEntry {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
+// Helper function for generating category-specific explanations
+const getCategoryExplanation = (category: string, correctAnswer: string) => {
+  const categoryExplanations: {[key: string]: string} = {
+    'javascript mastery': `This follows JavaScript best practices and modern syntax conventions.`,
+    'react kingdom': `This aligns with React's component architecture and state management principles.`,
+    'algorithm arena': `This provides the optimal algorithmic solution with efficient time/space complexity.`,
+    'database dungeon': `This follows database design best practices for data integrity and performance.`,
+    'cyber fortress': `This implements secure coding practices to prevent vulnerabilities.`,
+    'ai universe': `This correctly applies machine learning and AI development principles.`,
+    'python playground': `This leverages Python's syntax and libraries most effectively.`,
+    'web development': `This follows modern web development standards for performance and UX.`
+  };
+  
+  return categoryExplanations[category.toLowerCase()] || 
+         `This demonstrates proper understanding of ${category} concepts and best practices.`;
+};
+
 const AIQuizArena: React.FC = () => {
   const { user, token } = useAuth();
   const [gameMode, setGameMode] = useState<'menu' | 'playing' | 'results'>('menu');
@@ -824,9 +841,8 @@ const AIQuizArena: React.FC = () => {
       }      // Add explanations and ensure proper structure for all questions
       const processedQuestions = validQuestions.map((q, index) => {
         let explanation = q.explanation;
-        
-        // Generate better explanations if needed
-        if (!explanation || explanation.trim() === '' || explanation.includes('tests your knowledge of')) {
+          // Generate better explanations if needed
+        if (!explanation || explanation.trim() === '' || explanation.includes('tests your knowledge of') || explanation.length < 10) {
           const correctOption = q.options[q.correctAnswer];
           const categoryName = getCategoryDisplayName(category);
           
@@ -842,7 +858,7 @@ const AIQuizArena: React.FC = () => {
           };
           
           explanation = categoryExplanations[categoryName.toLowerCase()] || 
-                       `The correct answer is "${correctOption}". This demonstrates proper understanding of ${categoryName} concepts.`;
+                       `The correct answer is "${correctOption}". This demonstrates proper understanding of ${categoryName} concepts and follows industry best practices.`;
         }
         
         return {
@@ -877,15 +893,9 @@ const AIQuizArena: React.FC = () => {
         freshQuestions = [...freshQuestions, ...olderQuestions.slice(0, additionalNeeded)];
       }
 
-      const finalQuestions = freshQuestions.slice(0, questionCount);
-
-      // Add ONLY the final selected questions to history to prevent future repeats
-      const newQuestionIds = finalQuestions.map(q => q.id);
-      setQuestionHistory(prev => {
-        const updated = new Set([...prev, ...newQuestionIds]);
-        console.log(`📚 Question history updated: ${prev.size} -> ${updated.size} total questions tracked`);
-        return updated;
-      });console.log(`✅ Validated ${processedQuestions.length} questions for ${mode.toUpperCase()} mode`);
+      const finalQuestions = freshQuestions.slice(0, questionCount);      // DON'T add questions to history yet - wait until they're actually answered
+      console.log(`✅ Generated ${finalQuestions.length} questions for ${mode.toUpperCase()} mode (${freshQuestions.length} fresh)`);
+      console.log(`📚 Current question history size: ${questionHistory.size} questions tracked`);console.log(`✅ Validated ${processedQuestions.length} questions for ${mode.toUpperCase()} mode`);
       
       // Use finalQuestions instead of processedQuestions for the session
       const session: QuizSession = {
@@ -985,6 +995,13 @@ const AIQuizArena: React.FC = () => {
     setSelectedAnswer(answerIndex);
     const question = currentSession.questions[currentSession.currentQuestionIndex];
     const isCorrect = answerIndex === question.correctAnswer;
+    
+    // Add this question to history now that it's been answered
+    setQuestionHistory(prev => {
+      const updated = new Set([...prev, question.id]);
+      console.log(`📚 Added question ${question.id} to history. Total: ${updated.size} questions tracked`);
+      return updated;
+    });
     
     if (soundEnabled) {
       playSound(isCorrect ? 'correct' : 'wrong');
@@ -1518,14 +1535,20 @@ const AIQuizArena: React.FC = () => {
     });
 
     toast.success('Left multiplayer queue');
-  };
-  // Handle multiplayer answer submission
+  };  // Handle multiplayer answer submission
   const handleMultiplayerAnswerSelect = (answerIndex: number) => {
     if (selectedAnswer !== null || !currentSession || !socket || !multiplayerState.roomId) return;
     
     setSelectedAnswer(answerIndex);
     const question = currentSession.questions[currentSession.currentQuestionIndex];
     const isCorrect = answerIndex === question.correctAnswer;
+    
+    // Add this question to history for multiplayer too
+    setQuestionHistory(prev => {
+      const updated = new Set([...prev, question.id]);
+      console.log(`📚 [Multiplayer] Added question ${question.id} to history. Total: ${updated.size} questions tracked`);
+      return updated;
+    });
     
     // Improved multiplayer sound handling with delay and better error handling
     if (soundEnabled) {
@@ -2087,28 +2110,18 @@ const AIQuizArena: React.FC = () => {
                     
                     if (index !== selectedWrongIndex) {
                       return null; // Hide this wrong option
-                    }                  }                    let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
+                    }                  }                  let buttonClass = 'bg-white/10 hover:bg-white/20 border-white/30 text-white';
                   
                   if (showResult) {
-                    if (currentSession?.mode === 'multiplayer') {
-                      // In multiplayer, only highlight selected answer until server response
-                      if (isSelected) {
-                        buttonClass = multiplayerState.serverResultsReceived
-                          ? (isCorrect ? 'bg-green-500 border-green-400 text-white' : 'bg-red-500 border-red-400 text-white')
-                          : 'bg-blue-500 border-blue-400 text-white'; // Pending state
-                      } else if (isCorrect && multiplayerState.serverResultsReceived) {
-                        // Only show correct answer after server confirms
-                        buttonClass = 'bg-green-500/40 border-green-400/40 text-green-100';
-                      }
+                    if (isCorrect) {
+                      // Always highlight correct answer in green
+                      buttonClass = 'bg-green-500 border-green-400 text-white shadow-lg shadow-green-500/25';
+                    } else if (isSelected) {
+                      // Highlight selected wrong answer in red
+                      buttonClass = 'bg-red-500 border-red-400 text-white shadow-lg shadow-red-500/25';
                     } else {
-                      // Single-player logic - improved highlighting
-                      if (isCorrect) {
-                        buttonClass = 'bg-green-500 border-green-400 text-white shadow-lg shadow-green-500/25';
-                      } else if (isSelected) {
-                        buttonClass = 'bg-red-500 border-red-400 text-white shadow-lg shadow-red-500/25';
-                      } else {
-                        buttonClass = 'bg-white/5 border-white/20 text-white/60';
-                      }
+                      // Dim other unselected answers
+                      buttonClass = 'bg-white/5 border-white/20 text-white/60';
                     }
                   }
                   
@@ -2119,8 +2132,7 @@ const AIQuizArena: React.FC = () => {
                       whileTap={{ scale: 0.98 }}
                     >                      <Button
                         variant="outline"
-                        className={`w-full h-auto p-4 text-left justify-start ${buttonClass}`}
-                        onClick={() => {
+                        className={`w-full h-auto p-4 text-left justify-start ${buttonClass}`}                        onClick={() => {
                           if (currentSession?.mode === 'multiplayer') {
                             handleMultiplayerAnswerSelect(index); 
                           } else {
@@ -2153,11 +2165,10 @@ const AIQuizArena: React.FC = () => {
                           <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
                             <Brain className="h-4 w-4" />
                           </div>                          <div>
-                            <h4 className="font-semibold mb-2">Explanation</h4>
-                            <p className="text-blue-100">
-                              {question.explanation && question.explanation.trim() !== '' 
+                            <h4 className="font-semibold mb-2">Explanation</h4>                            <p className="text-blue-100">
+                              {question.explanation && question.explanation.trim() !== '' && !question.explanation.includes('tests your knowledge of')
                                 ? question.explanation 
-                                : 'This question helps test your understanding of the topic. Review the correct answer and continue learning!'
+                                : `The correct answer is "${question.options[question.correctAnswer]}". ${getCategoryExplanation(question.category || currentSession?.category || 'general', question.options[question.correctAnswer])}`
                               }
                             </p>
                           </div>
