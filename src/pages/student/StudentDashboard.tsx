@@ -93,6 +93,9 @@ const StudentDashboard: React.FC = () => {
     }
   }, [token]);
 
+  // Check if demo mode is active
+  const isDemoMode = import.meta.env.VITE_API_BASE_URL?.includes('localhost') || import.meta.env.DEV;
+
   // Initial data loading
   useEffect(() => {
     if (token) fetchSummary();
@@ -203,6 +206,18 @@ const StudentDashboard: React.FC = () => {
   return (
     <AppLayout pageTitle="Student Dashboard">
       <div className="p-6 font-sans min-h-[60vh]">
+        {/* Demo Mode Warning */}
+        {isDemoMode && (
+          <Alert className="mb-6 border-amber-500 bg-amber-50">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-900">Demo Mode Active</AlertTitle>
+            <AlertDescription className="text-amber-800">
+              MongoDB is not connected due to Atlas free tier inactivity pause. Full features including courses, 
+              attendance tracking, and feedback submission require an active database connection.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Dashboard Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
           <div>

@@ -153,6 +153,9 @@ const TeacherDashboard: React.FC = () => {
     fetchDashboardData();
   }, [fetchDashboardData]);
   
+  // Check if demo mode is active
+  const isDemoMode = import.meta.env.VITE_API_BASE_URL?.includes('localhost') || import.meta.env.DEV;
+  
   // If no user, don't render the dashboard
   if (!user) return null;
   
@@ -232,6 +235,18 @@ const TeacherDashboard: React.FC = () => {
   return (
     <AppLayout pageTitle="Teacher Dashboard">
       <div className="p-6 max-w-[1200px] mx-auto">
+        {/* Demo Mode Warning */}
+        {isDemoMode && (
+          <Alert className="mb-6 border-amber-500 bg-amber-50">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-900">Demo Mode Active</AlertTitle>
+            <AlertDescription className="text-amber-800">
+              MongoDB is not connected due to Atlas free tier inactivity pause. Full features including course management, 
+              attendance tracking, and feedback forms require an active database connection.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">

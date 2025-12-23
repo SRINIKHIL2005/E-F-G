@@ -1,187 +1,96 @@
-# Edu Feedback Galaxy
+# Educational Feedback Galaxy (E-F-G)
 
-## 🚀 Project Overview
+An AI-powered educational platform for interactive feedback, quizzes, and learning analytics.
 
-**Edu Feedback Galaxy** is a next-generation, AI-powered educational platform with a cyberpunk-inspired, animated interface. It revolutionizes feedback, quizzes, and analytics for students, teachers, and admins. The system features advanced AI (Gemini, Google APIs), real-time multiplayer quiz battles, document-based quiz generation, and a robust authentication and leaderboard system—all in a visually stunning, futuristic UI.
+## Features
 
----
+- **AI Quiz Arena** - Generate quizzes using Google Gemini AI from topics or uploaded documents
+- **Real-time Multiplayer** - Compete with other students in live quiz battles
+- **Feedback System** - Submit and receive AI-powered feedback on assignments
+- **Learning Analytics** - Track progress with visual dashboards and statistics
+- **Role-based Access** - Separate interfaces for students, teachers, and administrators
+- **Document Upload** - Generate quizzes from PDF, DOCX, and TXT files
 
-## 🌐 Live Deployment
+## Tech Stack
 
-### Production URLs
-- **Frontend**: [https://your-frontend-app.onrender.com](https://your-frontend-app.onrender.com) (Port 8080)
-- **Backend API**: [https://your-backend-app.onrender.com](https://your-backend-app.onrender.com) (Port 5000)
-- **Health Check**: [https://your-backend-app.onrender.com/api/health](https://your-backend-app.onrender.com/api/health)
+**Frontend**
+- React 18 with TypeScript
+- Vite for build tooling
+- Tailwind CSS for styling
+- shadcn/ui components
 
-### Quick Deploy to Render
-1. **Fork this repository**
-2. **Follow the deployment guides:**
-   - 📋 [Quick Deployment Checklist](DEPLOYMENT_CHECKLIST.md)
-   - 📖 [Detailed Render Guide](RENDER_DEPLOYMENT.md)
-3. **Setup required services:**
-   - MongoDB Atlas (Database)
-   - Firebase (Authentication)
-   - Google APIs (OAuth & Gemini AI)
+**Backend**
+- Node.js with Express
+- MongoDB for database
+- Socket.io for real-time features
+- Google Gemini AI integration
 
----
+**Authentication**
+- JWT tokens
+- Firebase Authentication
+- Google OAuth
 
-## 👤 Author Details
+## Getting Started
 
-- **Project Owner:** Dronadula Sri Nikhil
-- **Contact:** dronasrinikhil@gmail.com
-- **Year:** 2025
-- **Location:** HYD
-
----
-
-## 🏗️ Main Features
-
-- **Cyberpunk/AI Animated UI:** Matrix rain, parallax, holographic effects, and secret puzzles.
-- **Master Console:** Real-time admin dashboard with system state, overlays, logs, and AI assistant.
-- **AI Quiz Arena:** Gemini-powered quiz generation, multiplayer battles, power-ups, and leaderboards.
-- **Document Uploader:** Upload files (PDF, DOCX, TXT) to generate custom quizzes.
-- **Authentication:** JWT, Firebase, Google OAuth, role-based access.
-- **Feedback System:** AI-powered feedback, analytics, and suggestions.
-- **Learning Analytics:** Visual dashboards, streaks, coins, XP, and AI insights.
-- **Course & Student Management:** Full CRUD for teachers/admins.
-- **Legal & Privacy:** Cyberpunk-styled Privacy Policy and Terms, with real contact info.
-
----
-
-## 🛠️ Tech Stack
-
-- **Frontend:** React 18, Vite, TypeScript, Tailwind CSS, shadcn/ui, Framer Motion
-- **Backend:** Node.js, Express, MongoDB (Mongoose), Socket.io
-- **AI Integration:** Google Gemini API, Gemini Pro, Gemini Flash
-- **Authentication:** JWT, Firebase, Google OAuth
-- **File Uploads:** Multer, custom document parsing
-
----
-
-## ⚡ Quick Start
-
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/SRINIKHIL2005/EDUGALXY.git
-   cd EDUGALXY
-   ```
-2. **Install Dependencies**
-   ```bash
-   npm install
-   ```
-3. **Configure Environment**
-   - Copy `.env.example` to `.env` and fill in your API keys and MongoDB URI.
-4. **Start the Application**
-   ```bash
-   npm run dev
-   # Or start frontend/backend separately:
-   npm run dev:frontend
-   npm run dev:backend
-   ```
-5. **Access the App**
-   - Frontend: [http://localhost:8080](http://localhost:8080)
-   - Backend: [http://localhost:5000/api/health](http://localhost:5000/api/health)
-
----
-
-## 📦 GitHub & Deployment Best Practices
-
-- **Do NOT commit `node_modules` or `.env` files.**
-- All dependencies are managed via `package.json` and `package-lock.json`.
-- The `.gitignore` is set up to keep your repo clean and secure.
-- For deployment, push your code to GitHub and connect to Vercel, Netlify, or your own server.
-
----
-
-## 🚀 How to Deploy (Vercel/Netlify/Other)
-
-1. **Push your code to GitHub.**
-2. **Connect your repo to Vercel, Netlify, or your preferred host.**
-3. **Set environment variables** in the host dashboard (copy from your local `.env`).
-4. **Build and deploy.**
-5. **Update the Live Demo link above with your deployed URL!**
-
----
-
-## 📂 Project Structure
-
-```
-├── server/           # Express backend, AI endpoints, MongoDB models
-├── src/              # React frontend, pages, components, contexts
-├── public/           # Static assets
-├── .env              # Environment variables
-├── package.json      # Project dependencies and scripts
-├── vite.config.ts    # Vite configuration
-├── tsconfig*.json    # TypeScript configs
-└── ...
+1. Clone the repository
+```bash
+git clone https://github.com/SRINIKHIL2005/E-F-G.git
+cd E-F-G
 ```
 
----
+2. Install dependencies
+```bash
+npm install
+```
 
-## 🧩 Key Files & Directories
+3. Configure environment variables
+   - Copy `.env.example` to `.env`
+   - Add your MongoDB connection string
+   - Add Google Gemini API key
+   - Add Firebase configuration
+   - Add other required API keys
 
-- `server/server.js` — Main Express server, AI endpoints, Socket.io
-- `server/models/user.model.js` — User schema (roles, stats, achievements)
-- `server/routes/auth.routes.js` — Auth endpoints (JWT, Google, Firebase)
-- `src/pages/ai/AIQuizArena.tsx` — Main AI Quiz Arena logic (multiplayer, power-ups, quiz flow)
-- `src/components/quiz/DocumentUploader.tsx` — File upload and quiz generation
-- `src/contexts/AuthContext.tsx` — Auth logic, token management
-- `src/pages/feedback/` — Feedback forms, analytics, and results
+4. Start development server
+```bash
+npm run dev
+```
 
----
+The application will be available at `http://localhost:8080`
 
-## 🧪 Testing & Validation
+## Project Structure
 
-- **Health Check:** [http://localhost:5000/api/health](http://localhost:5000/api/health)
-- **Diagnostic:** Open `diagnostic.html` in your browser for system tests
-- **Manual Testing:**
-  - Login/register as student/teacher
-  - Generate quizzes (topic & file upload)
-  - Play multiplayer battles
-  - Submit/view feedback
-  - Check analytics and leaderboard
+```
+├── server/              # Backend Express server
+│   ├── models/         # MongoDB schemas
+│   ├── routes/         # API endpoints
+│   └── server.js       # Main server file
+├── src/                # Frontend React application
+│   ├── components/     # Reusable components
+│   ├── contexts/       # React contexts
+│   ├── pages/          # Page components
+│   └── lib/            # Utility functions
+└── public/             # Static assets
+```
 
----
+## Available Scripts
 
-## 🛡️ Security & Best Practices
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
 
-- All sensitive endpoints require JWT authentication
-- CORS configured for local development
-- Passwords hashed with bcrypt
-- Environment variables for all secrets
-- Input validation and error handling throughout
+## Environment Setup
 
----
+Create a `.env` file with the following variables:
 
-## 📈 Roadmap & Future Ideas
+```env
+MONGODB_URI=your_mongodb_connection_string
+GEMINI_API_KEY=your_gemini_api_key
+FIREBASE_API_KEY=your_firebase_api_key
+FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain
+FIREBASE_PROJECT_ID=your_firebase_project_id
+JWT_SECRET=your_jwt_secret
+```
 
-- More AI models and quiz types
-- Enhanced multiplayer matchmaking
-- Mobile app version
-- Gamification: badges, daily challenges
-- Teacher/HOD analytics dashboards
-- More file formats for quiz generation
+## Contact
 
----
-
-## 🤝 Contributing
-
-Pull requests and suggestions are welcome! Please open an issue or contact the maintainer for major changes.
-
----
-
-## 📄 License
-
-[MIT License] — See LICENSE file for details.
-
----
-
-## 🙏 Acknowledgements
-
-- Google Gemini API
-- React, Vite, Tailwind, shadcn/ui
-- All contributors and testers
-
----
-
-**Edu Feedback Galaxy — AI-powered learning for the next generation!**
+Dronadula Sri Nikhil - dronasrinikhil@gmail.com

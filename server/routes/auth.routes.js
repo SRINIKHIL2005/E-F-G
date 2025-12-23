@@ -1,5 +1,6 @@
 // routes/auth.routes.js using ES modules
 import express from 'express';
+import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import admin from 'firebase-admin';
 import User from '../models/user.model.js'; // Ensure your User model is exported as default
@@ -9,6 +10,18 @@ import { body, validationResult } from 'express-validator';
 import { loginLimiter, apiLimiter } from '../middleware/security.middleware.js';
 
 const router = express.Router();
+
+// Demo/auth fallback - check at runtime (not at module load)
+const isDemoAuth = () => process.env.DEMO_AUTH === 'true';
+const isDbConnected = () => mongoose.connection.readyState === 1;
+
+const buildDemoUser = (email) => ({
+  _id: '000000000000000000000000',
+  name: email?.split('@')[0] || 'Demo User',
+  email: (email || 'demo@example.com').toLowerCase(),
+  role: 'student',
+  department: 'General'
+});
 
 // Check email availability
 router.get('/check-email', async (req, res) => {
@@ -289,12 +302,52 @@ router.post('/register', [
 });
 
 // Login user with security checks
-router.post('/login', [
-  loginLimiter,
-  body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
-  body('password').notEmpty().withMessage('Password is required')
-], async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
+    // Check demo mode at runtime (after env is loaded)
+    const DEMO_AUTH = isDemoAuth();
+    console.log('🔐 Login attempt - DEMO_AUTH:', DEMO_AUTH);
+    
+    // DEMO MODE: Accept any credentials without checks
+    if (DEMO_AUTH) {
+      const { email } = req.body;
+      const demoUser = buildDemoUser(email);
+      const token = jwt.sign(
+        { id: demoUser._id, role: demoUser.role, uid: demoUser._id },
+        process.env.JWT_SECRET || 'your_jwt_secret',
+        { expiresIn: '30d' }
+      );
+      console.log('✅ Demo login successful for:', email);
+      return res.json({
+        success: true,
+        token,
+        user: {
+          id: demoUser._id,
+          name: demoUser.name,
+          email: demoUser.email,
+          role: demoUser.role,
+          department: demoUser.department,
+          lastLogin: new Date()
+        },
+        requiresConsent: false,
+        message: 'Login successful (demo mode)'
+      });
+    }
+
+    // Apply rate limiting only for real auth
+    await new Promise((resolve, reject) => {
+      loginLimiter(req, res, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    // Apply validation only for real auth
+    await Promise.all([
+      body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email').run(req),
+      body('password').notEmpty().withMessage('Password is required').run(req)
+    ]);
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -309,8 +362,35 @@ router.post('/login', [
     // Find user
     const user = await User.findOne({ email });
     if (!user) {
-      // Track failed login attempt
-      await ViolationEnforcer.trackFailedLogin(email, req.ip, req.get('User-Agent'));
+      // Allow demo auth even when DB is connected but user doesn't exist
+      if (DEMO_AUTH) {
+        const demoUser = buildDemoUser(email);
+        const token = jwt.sign(
+          { id: demoUser._id, role: demoUser.role, uid: demoUser._id },
+          process.env.JWT_SECRET || 'your_jwt_secret',
+          { expiresIn: '30d' }
+        );
+        console.log('✅ Demo login successful for:', email);
+        return res.json({
+          success: true,
+          token,
+          user: {
+            id: demoUser._id,
+            name: demoUser.name,
+            email: demoUser.email,
+            role: demoUser.role,
+            department: demoUser.department
+          },
+          requiresConsent: false,
+          message: 'Login successful (demo user created)'
+        });
+      }
+      // Track failed login attempt (only if not in demo mode)
+      try {
+        await ViolationEnforcer.trackFailedLogin(email, req.ip, req.get('User-Agent'));
+      } catch (err) {
+        console.error('Error tracking failed login:', err.message);
+      }
       
       console.error('Login error: User not found');
       return res.status(400).json({ 
@@ -351,8 +431,34 @@ router.post('/login', [
     // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      // Track failed login attempt
-      await ViolationEnforcer.trackFailedLogin(email, req.ip, req.get('User-Agent'));
+      if (DEMO_AUTH) {
+        const demoUser = buildDemoUser(email);
+        const token = jwt.sign(
+          { id: demoUser._id, role: demoUser.role, uid: demoUser._id },
+          process.env.JWT_SECRET || 'your_jwt_secret',
+          { expiresIn: '30d' }
+        );
+        console.log('✅ Demo login successful (password bypass) for:', email);
+        return res.json({
+          success: true,
+          token,
+          user: {
+            id: demoUser._id,
+            name: demoUser.name,
+            email: demoUser.email,
+            role: demoUser.role,
+            department: demoUser.department
+          },
+          requiresConsent: false,
+          message: 'Login successful (demo mode)'
+        });
+      }
+      // Track failed login attempt (only if not in demo mode)
+      try {
+        await ViolationEnforcer.trackFailedLogin(email, req.ip, req.get('User-Agent'));
+      } catch (err) {
+        console.error('Error tracking failed login:', err.message);
+      }
       
       console.error('Login error: Password mismatch');
       return res.status(400).json({ 

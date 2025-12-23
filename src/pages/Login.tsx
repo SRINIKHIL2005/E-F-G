@@ -378,6 +378,19 @@ const Login = () => {
       ref={containerRef}
       className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black relative overflow-hidden"
     >
+      {/* Demo Mode Warning Banner */}
+      <div className="absolute top-0 left-0 right-0 z-50 bg-amber-500/90 backdrop-blur-sm border-b border-amber-600">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-center gap-3 text-sm">
+            <AlertTriangle className="h-5 w-5 text-amber-900 flex-shrink-0" />
+            <p className="text-amber-900 font-medium text-center">
+              <strong>Demo Mode:</strong> MongoDB is paused due to Atlas free tier inactivity. 
+              Use any email/password to login and explore the platform. Full database features are limited.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* System Initialization Overlay */}
       {!systemInitialized && (
         <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">

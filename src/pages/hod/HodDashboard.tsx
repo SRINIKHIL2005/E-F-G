@@ -1743,8 +1743,23 @@ const HodDashboard = () => {
 
   if (!user) return null;
 
+  const isDemoMode = import.meta.env.VITE_API_BASE_URL?.includes('localhost') || import.meta.env.DEV;
+
   return (
     <AppLayout pageTitle="HOD Dashboard">
+      {/* Demo Mode Warning */}
+      {isDemoMode && (
+        <div className="mx-6 mt-6">
+          <Alert className="border-amber-500 bg-amber-50">
+            <Settings className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              <strong className="font-semibold">Demo Mode Active:</strong> MongoDB is not connected due to Atlas free tier inactivity pause. 
+              Full department management features including student/faculty management, course administration, and analytics require an active database connection.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+      
       {renderDashboardHeader()}
 
       {/* Settings Modal */}

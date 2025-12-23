@@ -27,6 +27,7 @@ dotenv.config();
 // Debug: Check if JWT_SECRET is loaded
 console.log('JWT_SECRET loaded:', process.env.JWT_SECRET ? 'Yes' : 'No');
 console.log('JWT_SECRET value:', process.env.JWT_SECRET || 'Using fallback: your_jwt_secret');
+console.log('DEMO_AUTH enabled:', process.env.DEMO_AUTH === 'true' ? 'Yes' : 'No');
 
 // 1.5️⃣ Global question cache to prevent repetition
 const questionCache = new Map(); // Map<subject_difficulty_gameMode, Set<questionHashes>>
@@ -90,7 +91,8 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
       'http://172.16.0.2:8080',
       'http://localhost:3000',
       'http://localhost:8080',
-      'http://localhost:8081'
+      'http://localhost:8081',
+      'http://localhost:5173'
     ];
 
 const io = new Server(server, {
@@ -111,7 +113,8 @@ const corsOrigins = process.env.NODE_ENV === 'production'
       'http://172.16.0.2:8080',
       'http://localhost:3000',
       'http://localhost:8080',
-      'http://localhost:8081'
+      'http://localhost:8081',
+      'http://localhost:5173'
     ];
 
 app.use(cors({
@@ -136,6 +139,8 @@ app.use(cors({
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization','x-gemini-api-key']
 }));
+// Explicitly handle preflight requests for all routes
+app.options('*', cors());
 // Increase JSON payload limit for file uploads (base64 can be large)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -158,10 +163,20 @@ app.use((req, res, next) => {
   // Explicitly disable Cross-Origin-Opener-Policy to fix Google Sign-In
   res.setHeader('Cross-Origin-Opener-Policy', 'unsafe-none');
   res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
-  // Ensure CORS headers are properly set
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Align CORS headers with dynamic origin handling and credentials support
+  const origin = req.headers.origin;
+  if (origin && (corsOrigins.includes(origin) || (process.env.NODE_ENV === 'production' && origin.endsWith('.onrender.com')))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, x-gemini-api-key');
+  // Short-circuit preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
   next();
 });
 
