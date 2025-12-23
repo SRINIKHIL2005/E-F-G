@@ -1305,7 +1305,7 @@ const Index = () => {
                   filter: 'drop-shadow(0 2px 10px rgba(0, 0, 0, 0.8))'
                 }}
               >
-                Educational Feedback Galaxy
+                E-learning Fusion Galaxy
               </h2>
             </div>
 

@@ -1,4 +1,4 @@
-# Educational Feedback Galaxy (E-F-G)
+# E-learning Fusion Galaxy (E-F-G)
 
 An AI-powered educational platform for interactive feedback, quizzes, and learning analytics.
 

@@ -39,7 +39,7 @@ const TermsOfServicePage = () => {
                     Acceptance of Terms
                   </h2>
                   <div className="space-y-3 text-gray-700">
-                    <p>By accessing or using the Educational Feedback Galaxy platform, you agree to be bound by these Terms of Service and all applicable laws and regulations.</p>
+                    <p>By accessing or using the E-learning Fusion Galaxy platform, you agree to be bound by these Terms of Service and all applicable laws and regulations.</p>
                     <p>If you do not agree with any of these terms, you are prohibited from using or accessing this platform.</p>
                   </div>
                 </section>
@@ -108,7 +108,7 @@ const TermsOfServicePage = () => {
                 <section>
                   <h3 className="text-lg font-semibold mb-3 text-gray-800">Intellectual Property</h3>
                   <div className="space-y-3 text-gray-700">
-                    <p><strong>Platform Content:</strong> All original content, features, and functionality are owned by Educational Feedback Galaxy.</p>
+                    <p><strong>Platform Content:</strong> All original content, features, and functionality are owned by E-learning Fusion Galaxy.</p>
                     <p><strong>User Content:</strong> Users retain ownership of their submitted content but grant us license to use it for platform operations.</p>
                     <p><strong>Academic Work:</strong> Student submissions remain the intellectual property of the student and educational institution.</p>
                   </div>
@@ -131,7 +131,7 @@ const TermsOfServicePage = () => {
                     </p>
                     <p className="mt-2 text-gray-700">
                       <strong>Email:</strong> legal@efg-platform.edu<br />
-                      <strong>Address:</strong> Educational Feedback Galaxy, Legal Department<br />
+                      <strong>Address:</strong> E-learning Fusion Galaxy, Legal Department<br />
                       <strong>Phone:</strong> +1 (555) 123-4567
                     </p>
                   </div>

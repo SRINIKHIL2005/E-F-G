@@ -107,7 +107,7 @@ const PrivacyPolicyPage = () => {
                     </p>
                     <p className="mt-2 text-gray-700">
                       <strong>Email:</strong> privacy@efg-platform.edu<br />
-                      <strong>Address:</strong> Educational Feedback Galaxy, Privacy Department<br />
+                      <strong>Address:</strong> E-learning Fusion Galaxy, Privacy Department<br />
                       <strong>Phone:</strong> +1 (555) 123-4567
                     </p>
                   </div>
