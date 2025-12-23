@@ -81,12 +81,13 @@ app.set('trust proxy', 1);
 const server = createServer(app);
 const PORT = process.env.PORT || 5000;
 
-// 2.5️⃣ Initialize Socket.io
+// 2.5️⃣ Initialize Socket.io with enhanced CORS
 const allowedOrigins = process.env.NODE_ENV === 'production' 
   ? [
       process.env.FRONTEND_URL,
-      'https://e-f-g-1.onrender.com' // Your actual Render frontend URL
-    ]
+      'https://e-f-g-1.onrender.com', // Primary frontend URL
+      'https://e-f-g.onrender.com'    // Backend URL (for same-origin testing)
+    ].filter(Boolean) // Remove undefined/null values
   : [
       'http://172.16.0.2:8080',
       'http://localhost:3000',
@@ -103,12 +104,13 @@ const io = new Server(server, {
   }
 });
 
-// 3️⃣ CORS & JSON parsing (MUST come before everything else)
+// 3️⃣ Enhanced CORS Configuration
 const corsOrigins = process.env.NODE_ENV === 'production'
   ? [
       process.env.FRONTEND_URL,
-      'https://e-f-g-1.onrender.com' // Your actual Render frontend URL
-    ]
+      'https://e-f-g-1.onrender.com', // Primary frontend URL
+      'https://e-f-g.onrender.com'    // Backend URL
+    ].filter(Boolean) // Remove undefined/null values
   : [
       'http://172.16.0.2:8080',
       'http://localhost:3000',
@@ -117,28 +119,41 @@ const corsOrigins = process.env.NODE_ENV === 'production'
       'http://localhost:5173'
     ];
 
+// Log allowed origins for debugging
+console.log('🌐 CORS Allowed Origins:', corsOrigins);
+console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
+
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    // Allow requests with no origin (like mobile apps, Postman, or curl)
+    if (!origin) {
+      console.log('✅ CORS: Allowing request with no origin');
+      return callback(null, true);
+    }
     
     // Check if the origin is in our allowed list
     if (corsOrigins.includes(origin)) {
+      console.log('✅ CORS: Allowed origin:', origin);
       return callback(null, true);
     }
     
     // For production, also allow any .onrender.com subdomain
-    if (process.env.NODE_ENV === 'production' && origin.endsWith('.onrender.com')) {
+    if (origin.endsWith('.onrender.com')) {
+      console.log('✅ CORS: Allowing Render subdomain:', origin);
       return callback(null, true);
     }
     
+    console.log('❌ CORS: Rejected origin:', origin);
     const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
     return callback(new Error(msg), false);
   },
-  credentials: true,           // allow Set-Cookie if needed
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization','x-gemini-api-key']
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-gemini-api-key', 'Accept'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400 // 24 hours
 }));
+
 // Explicitly handle preflight requests for all routes
 app.options('*', cors());
 // Increase JSON payload limit for file uploads (base64 can be large)
